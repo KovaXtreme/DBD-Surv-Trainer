@@ -1,5 +1,6 @@
-[README.md](https://github.com/user-attachments/files/31312312/README.md)
 # DBD Surv Trainer
+
+### ⬇️ [**Click here to download the latest version**](../../releases/latest)
 
 Unofficial desktop tool for Dead by Daylight survivor training — 1v1 timer with an in-game overlay, clock callouts for maps, a moonwalk trainer, and more.
 
