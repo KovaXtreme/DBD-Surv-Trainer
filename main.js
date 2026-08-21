@@ -106,10 +106,29 @@ const SPECIAL_UIOHOOK_KEYCODE = {}; // Shift/Control/Alt -> keycode, filled in o
 // bound to it. Populated from the same bindings list applyHotkeyBindings
 // receives, just filtered to these instead of going through globalShortcut.
 let specialBindings = new Map();
+// True while the renderer's "click a box, press a key/button" capture UI
+// is actively listening for a NEW binding (either grid). The shared hook
+// needs to stay running during that window even if nothing is bound to
+// a mouse button yet, purely so mouse clicks can be relayed for capture.
+let capturingMouseButtons = false;
+
+// Which screen is currently showing in the main window ('1v1', 'maps',
+// or anything else -- home/hub, credits, etc). Every hotkey action id is
+// prefixed 'timer:' or 'map:'; dispatch only goes through while the
+// matching screen is the active one, even while the game itself has
+// focus -- see set-active-screen below and shouldDispatchHotkey's use at
+// every dispatch site (globalShortcut, the modifier-key path, the mouse
+// button path, and gamepad).
+let activeScreen = null;
+function shouldDispatchHotkey(actionId) {
+  if (actionId.startsWith('timer:')) return activeScreen === '1v1';
+  if (actionId.startsWith('map:')) return activeScreen === 'maps';
+  return true;
+}
 
 function refreshSharedHookState() {
   if (!uIOhookInstance) return;
-  const needed = specialBindings.size > 0;
+  const needed = specialBindings.size > 0 || capturingMouseButtons;
   if (needed && !m1HookRunning) {
     try {
       uIOhookInstance.start();
@@ -293,11 +312,13 @@ async function initGamepadFeature() {
         // print during the exact moment being tested).
         console.log('[gamepad] button pressed:', button);
         const actionId = gamepadBindings.get(button);
-        if (actionId) {
+        if (actionId && shouldDispatchHotkey(actionId)) {
           console.log('[gamepad] FIRED:', button, '->', actionId, 'at', new Date().toISOString());
           if (mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.webContents.send('hotkey-fired', actionId);
           }
+        } else if (actionId) {
+          console.log('[gamepad]', button, '-> bound to', actionId, 'but wrong screen active (', activeScreen, ') -- skipped');
         }
       }
       lastGamepadButtons = buttons;
@@ -325,8 +346,12 @@ async function initM1Feature() {
     uIOhookInstance.on('keydown', (e) => {
       if (specialBindings.size === 0) return;
       for (const [keyName, actionId] of specialBindings) {
-        if (keyName === 'M1') continue; // handled in the mousedown listener below
+        if (keyName === 'M1' || keyName === 'M2' || keyName === 'M4' || keyName === 'M5') continue; // handled in the mousedown listener below
         if (e.keycode === SPECIAL_UIOHOOK_KEYCODE[keyName]) {
+          if (!shouldDispatchHotkey(actionId)) {
+            console.log('[hotkeys]', keyName, '-> bound to', actionId, 'but wrong screen active (', activeScreen, ') -- skipped');
+            return;
+          }
           console.log('[hotkeys] modifier key FIRED:', keyName, '->', actionId, 'at', new Date().toISOString());
           if (mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.webContents.send('hotkey-fired', actionId);
@@ -336,34 +361,49 @@ async function initM1Feature() {
       }
     });
 
+    // Button numbers per uiohook-napi/libuiohook convention: 1=left,
+    // 2=right, 3=middle, 4=side/back (X1), 5=side/forward (X2). Middle
+    // click (3) is left out -- too easy to trigger by accident (e.g.
+    // opening a link in a new tab) for how rarely it's actually useful as
+    // a hotkey, unlike M1/M2/M4/M5 which are all deliberate, purposeful
+    // clicks.
+    const MOUSE_BUTTON_NAMES = { 1: 'M1', 2: 'M2', 4: 'M4', 5: 'M5' };
+
     uIOhookInstance.on('mousedown', async (e) => {
-      const actionId = specialBindings.get('M1');
-      if (!actionId) return;
-      if (e.button !== 1) return; // 1 = left button in uiohook-napi
-      console.log('[M1] left click detected while M1 bound, checking foreground window...');
-      try {
-        const win = await activeWindowFn();
-        const ownerName = win && win.owner && win.owner.name || '';
-        console.log('[M1] foreground window owner:', JSON.stringify(ownerName));
-        // Confirmed via real logs: active-win reports the process/window
-        // owner name as "Dead by Daylight" (with spaces) -- the old regex
-        // here (/deadbydaylight/i, no spaces) never matched that, so M1
-        // silently ignored every click even while the game was correctly
-        // focused. \s* between each word tolerates the real spaced name
-        // and, defensively, any future spaceless variant too.
-        if (!/dead\s*by\s*daylight/i.test(ownerName)) {
-          console.log('[M1] not Dead by Daylight, ignoring this click');
-          return;
+      const buttonName = MOUSE_BUTTON_NAMES[e.button];
+      if (!buttonName) return;
+
+      // While the renderer is "listening" for a hotkey to bind (any slot,
+      // either grid), relay every mouse button press it cares about --
+      // this is what lets clicking M4/M5 actually get captured as a
+      // binding, the same principle as the gamepad capture relay further
+      // up this file. Logged unconditionally too, so a real run can
+      // immediately confirm whether these button numbers are correct for
+      // someone's actual mouse (side buttons aren't 100% standardized
+      // across every manufacturer).
+      if (capturingMouseButtons) {
+        console.log('[mouse] button pressed while capturing:', buttonName, '(raw button code', e.button + ')');
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('mouse-button-input', buttonName);
         }
-      } catch (err) {
-        console.warn('[M1] could not read foreground window, ignoring this click:', err && err.message);
-        return; // if we can't tell what's focused, don't guess -- stay silent
       }
-      console.log('[M1] match confirmed -- dispatching', actionId);
+
+      const actionId = specialBindings.get(buttonName);
+      if (!actionId) return;
+      // Deliberately no "is Dead by Daylight focused" check here (unlike
+      // this app's very first version of M1 support) -- explicitly
+      // requested: a bound mouse button should fire the same way an F-key
+      // does, everywhere, regardless of what has focus. Screen-gating
+      // (shouldDispatchHotkey below) is the only remaining condition.
+      if (!shouldDispatchHotkey(actionId)) {
+        console.log('[mouse]', buttonName, '-> bound to', actionId, 'but wrong screen active (', activeScreen, ') -- skipped');
+        return;
+      }
+      console.log('[mouse] FIRED:', buttonName, '->', actionId, 'at', new Date().toISOString());
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('hotkey-fired', actionId);
       } else {
-        console.warn('[M1] mainWindow unavailable, could not dispatch');
+        console.warn('[mouse] mainWindow unavailable, could not dispatch');
       }
     });
 
@@ -578,12 +618,12 @@ function applyHotkeyBindings(bindings) {
   specialBindings.clear();
 
   (bindings || []).forEach(({ id, key }) => {
-    if (key === 'M1') {
-      // The left mouse click: routed to the uiohook mousedown listener
-      // (with its own Dead by Daylight focus check) instead of
-      // globalShortcut, which has no concept of mouse buttons at all.
-      specialBindings.set('M1', id);
-      console.log('[hotkeys] M1 for', id, '-> routed to the uiohook mouse-click path (not globalShortcut)');
+    if (key === 'M1' || key === 'M2' || key === 'M4' || key === 'M5') {
+      // Mouse clicks: routed to the uiohook mousedown listener (with its
+      // own Dead by Daylight focus check) instead of globalShortcut,
+      // which has no concept of mouse buttons at all.
+      specialBindings.set(key, id);
+      console.log('[hotkeys]', key, 'for', id, '-> routed to the uiohook mouse-click path (not globalShortcut)');
       return;
     }
     if (key && SPECIAL_UIOHOOK_KEYCODE.hasOwnProperty(key)) {
@@ -606,6 +646,10 @@ function applyHotkeyBindings(bindings) {
     }
 
     const ok = globalShortcut.register(accelerator, () => {
+      if (!shouldDispatchHotkey(id)) {
+        console.log('[hotkeys]', accelerator, '-> bound to', id, 'but wrong screen active (', activeScreen, ') -- skipped');
+        return;
+      }
       console.log('[hotkeys] FIRED:', accelerator, '->', id, 'at', new Date().toISOString());
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('hotkey-fired', id);
@@ -673,6 +717,21 @@ ipcMain.on('update-gamepad-hotkeys', (_event, bindings) => {
   console.log('[gamepad] bindings updated:', Array.from(gamepadBindings.entries()));
 });
 
+// Sent by the renderer the moment its "click a box, press a key" capture
+// UI opens/closes (either grid). While true, the shared hook is kept
+// running (see refreshSharedHookState) purely so a mouse click can be
+// relayed back via 'mouse-button-input' for the box to capture -- needed
+// even when nothing is bound to a mouse button yet.
+ipcMain.on('set-capturing-mouse-buttons', (_event, capturing) => {
+  capturingMouseButtons = !!capturing;
+  refreshSharedHookState();
+});
+
+ipcMain.on('set-active-screen', (_event, screenName) => {
+  activeScreen = screenName;
+  console.log('[hotkeys] active screen set to:', screenName, '-- timer:* hotkeys', (screenName === '1v1' ? 'ENABLED' : 'disabled'), ', map:* hotkeys', (screenName === 'maps' ? 'ENABLED' : 'disabled'));
+});
+
 ipcMain.on('state-sync', (_event, payload) => {
   [mapOverlayWindow, timerOverlayWindow].forEach((win) => {
     if (win && !win.isDestroyed()) win.webContents.send('state-sync', payload);
@@ -725,8 +784,11 @@ ipcMain.on('match-start-left-only', () => {
 
 ipcMain.on('match-reset', () => {
   matchRunning = false;
-  matchT1Elapsed = 0; matchT2Elapsed = 0;
-  matchActiveTimer = 1;
+  // Only the currently active timer gets zeroed -- the other side's
+  // elapsed time is left untouched, and matchActiveTimer itself isn't
+  // forced back to 1, so a reset mid-match doesn't silently switch which
+  // side is "active" for the next start.
+  if (matchActiveTimer === 1) matchT1Elapsed = 0; else matchT2Elapsed = 0;
   ensureMatchTickIntervalState();
   broadcastMatchTick();
 });
