@@ -46,6 +46,24 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('gamepad-input', (_event, buttons) => callback(buttons));
   },
 
+  // ----- mouse side buttons (M1/M4/M5) as regular hotkeys -----
+  // Tells main.js whether the "click a box, press a key" capture UI is
+  // currently open, so it knows to relay mouse clicks for capture (see
+  // onMouseButtonInput) even before anything is actually bound to one.
+  setCapturingMouseButtons: (capturing) => ipcRenderer.send('set-capturing-mouse-buttons', capturing),
+
+  // Tells main.js which screen is currently showing in the main window,
+  // so it can gate hotkey dispatch (timer:* only while '1v1' is active,
+  // map:* only while 'maps' is active).
+  setActiveScreen: (screenName) => ipcRenderer.send('set-active-screen', screenName),
+  // Fired whenever M1/M4/M5 is clicked while capturing is active,
+  // regardless of whether it matches an existing binding -- this is what
+  // lets a hotkey card capture "the user just clicked their side button"
+  // the same way it captures a keydown event.
+  onMouseButtonInput: (callback) => {
+    ipcRenderer.on('mouse-button-input', (_event, buttonName) => callback(buttonName));
+  },
+
   // ----- match timer (authoritative in the main process) -----
   // The actual elapsed-time counting happens in main.js, not in either
   // renderer window -- see the note there for why (Chromium throttles
