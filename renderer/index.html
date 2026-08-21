@@ -21,6 +21,18 @@
       document.documentElement.classList.add('electron-main-window');
     }
   })();
+
+  // Right-click (M2) is a bindable hotkey now, in the main window's own
+  // hotkey boxes -- without this, right-clicking one to bind M2 would
+  // also pop up the browser's default context menu right on top of it.
+  // Actual text fields (the map search box, in-place name/score editing)
+  // are left alone, so normal cut/copy/paste via right-click still works
+  // there.
+  document.addEventListener('contextmenu', function(e){
+    var t = e.target;
+    if(t.tagName==='INPUT' || t.tagName==='TEXTAREA' || t.isContentEditable) return;
+    e.preventDefault();
+  });
 </script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -544,7 +556,6 @@
 #screen-trainer * { box-sizing: border-box; margin: 0; padding: 0; }
 #screen-trainer .trainer-back,
 #screen-vault .trainer-back { padding: 12px 20px; }
-#screen-trainer .info-btn { padding: 12px 20px; }
 
 #screen-trainer .wrap {
     max-width: 1100px;
@@ -610,13 +621,17 @@
     letter-spacing: 1px;
     cursor: pointer;
     z-index: 5;
-    color: #a89890;
     padding: 12px 20px;
+    /* Red by default (overlay hidden/inactive) -- overridden to green
+       below once .active is toggled on (overlay shown). */
+    color: #ff6b5e;
+    border-color: rgba(224,58,47,0.55);
+    box-shadow: 0 0 14px rgba(224,58,47,0.28);
   }
   .ayrun-toggle.active {
-    border-color: rgba(217,86,79,0.65);
-    box-shadow: 0 0 16px rgba(217,86,79,0.4);
-    color: #ff9d95;
+    border-color: rgba(79,196,110,0.65);
+    box-shadow: 0 0 16px rgba(79,196,110,0.4);
+    color: #7bdb92;
   }
 #screen-trainer .bpm-row label {
     font-size: 12px;
@@ -1700,6 +1715,12 @@
     border-radius: 12px;
     padding: 14px 16px;
   }
+  .hk-hint {
+    margin-top: 9px;
+    font-size: 11px;
+    line-height: 1.4;
+    color: #8a7d76;
+  }
   .hk-head {
     display: flex;
     align-items: center;
@@ -1983,7 +2004,7 @@
   #screen-vault   { min-width: 1000px; }
   #screen-1v1     { min-width: 1000px; }
 
-/* ===== Maps / Cloaks module ===== */
+/* ===== Maps / Clocks module ===== */
 #screen-maps { position: relative; padding-top: 40px; min-width: 1000px; }
 #screen-maps * { box-sizing: border-box; }
 #screen-maps .wrap {
@@ -2092,7 +2113,15 @@
        to begin with. */
     pointer-events: auto;
   }
-  .maps-version-dots.show { display: flex; }
+  .maps-version-dots.show {
+    /* Deliberately kept hidden even when the JS adds "show" (multiple
+       layouts exist for the current map) -- the version-cycling ability
+       itself stays fully intact via the Cycle Map Version Key hotkey,
+       this just removes the dots visually from both the real overlay and
+       the app's own preview. Everything else about how they're built and
+       tracked is untouched, in case they're ever wanted back. */
+    display: none;
+  }
   /* The button itself is a much bigger click target than what's actually
      drawn (a dot via ::before) -- clicking these precisely over an
      in-game overlay with a mouse, often mid-match, was reported as
@@ -2146,15 +2175,6 @@
   }
   .maps-credit a { color: #a8776f; text-decoration: none; }
   .maps-credit a:hover { color: #ff9d95; text-decoration: underline; }
-  .info-btn {
-    position: absolute;
-    top: 24px; right: 24px;
-    padding: 12px 20px;
-    font-size: 15px; font-weight: 700; letter-spacing: 1px;
-    color: #a89890; cursor: pointer; z-index: 5;
-  }
-  #screen-1v1 .info-btn,
-  #screen-maps .info-btn { top: 84px; }
   /* Small non-blocking notice, e.g. for "that key can't be used as a
      global hotkey" -- deliberately not a native alert(), which freezes
      JS execution until dismissed and would look jarring mid-setup. */
@@ -2181,47 +2201,6 @@
     opacity: 1;
     transform: translate(-50%, 0);
   }
-  .info-modal {
-    position: fixed; inset: 0;
-    background: rgba(6,3,4,0.82);
-    backdrop-filter: blur(4px);
-    display: none; align-items: center; justify-content: center;
-    z-index: 400; padding: 30px;
-  }
-  .info-modal.open { display: flex; }
-  .info-card {
-    max-width: 620px; width: 100%;
-    max-height: 82vh; overflow-y: auto;
-    background: rgba(23,20,21,0.97);
-    border: 1px solid rgba(255,255,255,0.14);
-    border-radius: 16px; padding: 30px 32px;
-    box-shadow: 0 10px 50px rgba(0,0,0,0.7), 0 0 40px rgba(180,20,30,0.18);
-  }
-  .info-card h3 {
-    font-family: 'Cinzel', serif; font-size: 21px; font-weight: 800;
-    color: #f2e6de; margin-bottom: 16px;
-    text-shadow: 0 0 16px rgba(180,20,30,0.5);
-  }
-  .info-card p { font-size: 14px; line-height: 1.75; color: #cfc2ba; margin-bottom: 12px; }
-  .info-card b { color: #ff9d95; }
-  .info-close { text-align: right; margin-top: 18px; }
-  .info-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 9px;
-  }
-  .info-ico {
-    width: 17px; height: 17px;
-    color: #e05a4a;
-    flex-shrink: 0;
-    filter: drop-shadow(0 0 6px rgba(224,58,47,0.55));
-    animation: infoPulse 2.2s ease-in-out infinite;
-  }
-  @keyframes infoPulse {
-    0%, 100% { opacity: 0.75; }
-    50%      { opacity: 1; }
-  }
-  .info-btn:hover .info-ico { color: #ff7a68; animation: none; opacity: 1; }
   .maps-canvas-wrap img {
     max-width: 100%; max-height: 100%;
     width: auto; height: auto;
@@ -2271,14 +2250,6 @@
     <div class="ov-bar-name" id="ovBarP2"><span id="ovBarP2Name">PLAYER 2</span></div>
   </div>
   <div class="ov-side-timer" id="ovTimerP2">0:00</div>
-</div>
-
-<div class="info-modal" id="infoModal" onclick="closeInfo(event)">
-  <div class="info-card" onclick="event.stopPropagation()">
-    <h3 id="infoTitle"></h3>
-    <div id="infoBody"></div>
-    <div class="info-close"><button class="ov-ctl-btn" onclick="closeInfo()">Close</button></div>
-  </div>
 </div>
 
 <div class="topbar" id="topbar">
@@ -2361,8 +2332,8 @@
         </div>
         <div class="module-card active" id="moduleMaps" onclick="enterMaps(this)">
           <div>
-            <div class="module-name">Maps / Cloaks Overlays</div>
-            <div class="module-desc">Map overlays showing the 1-12 cloak numbers to help you read your position</div>
+            <div class="module-name">Maps / Clocks Overlays</div>
+            <div class="module-desc">Map overlays showing the 1-12 clock numbers to help you read your position</div>
           </div>
           <span class="module-tag ready">Ready</span>
         </div>
@@ -2374,7 +2345,6 @@
 <div class="screen" id="screen-trainer">
 <div class="wrap">
   <a class="trainer-back back-box" onclick="showScreen('hub')">&larr; Back to modules</a>
-  <div class="info-btn back-box" onclick="openInfo('moonwalk')"><svg class="info-ico" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 3.2 22 20.2H2L12 3.2z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M12 9.4v4.4" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><circle cx="12" cy="17" r="1.25" fill="currentColor"/></svg><span>Why to use it</span></div>
   <div class="title">Moonwalk trainer</div>
   <div class="subtitle">Train the A / D rhythm</div>
 
@@ -2446,7 +2416,6 @@
 <div class="screen" id="screen-vault">
 <div class="wrap">
   <a class="trainer-back back-box" onclick="showScreen('hub')">&larr; Back to modules</a>
-  <div class="info-btn back-box" onclick="openInfo('vault')"><svg class="info-ico" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 3.2 22 20.2H2L12 3.2z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M12 9.4v4.4" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><circle cx="12" cy="17" r="1.25" fill="currentColor"/></svg><span>Why to use it</span></div>
   <div class="title">Vault / Pallet Timing</div>
   <div class="subtitle">Train fast spacebar reflexes</div>
 
@@ -2522,7 +2491,6 @@
 <div class="wrap">
   <a class="trainer-back back-box" onclick="showScreen('hub')">&larr; Back to modules</a>
   <div class="ayrun-toggle back-box" id="overlayToggle">Overlay: HIDDEN</div>
-  <div class="info-btn back-box" onclick="openInfo('timer')"><svg class="info-ico" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 3.2 22 20.2H2L12 3.2z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M12 9.4v4.4" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><circle cx="12" cy="17" r="1.25" fill="currentColor"/></svg><span>Why is it the best</span></div>
   <div class="title">1v1 Timer</div>
   <div class="subtitle">Scoreboard &amp; match timer overlay</div>
   <div class="ov-panel">
@@ -2596,8 +2564,6 @@
     </div>
     <div class="ov-hint">Turn the overlay on with the toggle above, then drag it into place with the sliders. In the desktop app it stays on top of the game; in the browser you can capture this page in OBS.</div>
   </div>
-
-  <div class="key-callout" style="margin-top:10px; text-align:left;">Turn the overlay on with the toggle above, then control everything with the hotkeys below. Press <b>F3</b> to edit names and score directly on the overlay bar (rebindable above, under "Edit Names / Score Key"). If you enable a Crouch or M1 key above, either one starts the timer on the left side only, and only while it's stopped &mdash; no effect while it's already running. Click a box, then either press any keyboard key, or click again to bind your mouse's M1 (left click) instead; a key bound to M1 only triggers while Dead by Daylight itself is focused.</div>
 </div>
 </div>
 
@@ -2605,9 +2571,8 @@
 <div class="wrap">
   <a class="trainer-back back-box" onclick="showScreen('hub')">&larr; Back to modules</a>
   <div class="ayrun-toggle back-box" id="mapOverlayToggle">Overlay: HIDDEN</div>
-  <div class="info-btn back-box" onclick="openInfo('maps')"><svg class="info-ico" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 3.2 22 20.2H2L12 3.2z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M12 9.4v4.4" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><circle cx="12" cy="17" r="1.25" fill="currentColor"/></svg><span>Why is it the best</span></div>
 
-  <div class="title">Maps / Cloaks</div>
+  <div class="title">Maps / Clocks</div>
   <div class="subtitle">Clock callouts overlay</div>
 
   <div class="maps-layout">
@@ -2630,7 +2595,7 @@
   <div class="ov-panel">
     <div class="ov-panel-title">Keyboard Hotkeys</div>
     <div class="hk-grid" id="mapHkGrid"></div>
-    <div class="ov-hint">Click a key box, then press the key you want to bind.</div>
+    <div class="ov-hint">Click a key box, then press the key you want to bind. <b id="mapDetectState"></b></div>
   </div>
 
   <div class="ov-panel">
@@ -2666,10 +2631,6 @@
       <span class="ayrun-cam-value" id="mapOvBrightnessValue">100%</span>
     </div>
     <div class="ov-hint">In the desktop app the overlay stays on top of the game; in the browser you can capture this page in OBS.</div>
-  </div>
-
-  <div class="key-callout" style="margin-top:10px; text-align:left;">
-    On a map with alternate layouts (Ormond, Coal Tower, Badham Preschool, and others), small dots appear below the map showing each version. To switch while in-game: press the <b>Cycle Map Version Key</b> (rebindable above, default F9) &mdash; each press moves to the next version, right to left, wrapping back around once it reaches the last one. In the app itself, you can also just click the dots below the map directly. Pressing the <b>Detect Map Key</b> reads the map name from the game screen and switches the overlay automatically &mdash; press <b>Tab</b> in-game first so the map name is actually visible on screen for it to read. <b id="mapDetectState"></b>
   </div>
 </div>
 </div>
@@ -2718,12 +2679,12 @@
     </div>
     <div class="legal-card">
       <h3>Map callouts</h3>
-      <p>The clock-callout map layouts used in the Maps / Cloaks module come from Hens' Callouts, used with Hens' kind permission.</p>
+      <p>The clock-callout map layouts used in the Maps / Clocks module come from Hens' Callouts, used with Hens' kind permission.</p>
       <p><a href="https://hens333.com/callouts" target="_blank" rel="noopener" style="color:#ff9d95;">hens333.com/callouts</a></p>
     </div>
     <div class="legal-card">
       <h3>1v1 Timer</h3>
-      <p>Thanks to TulipErika for innovative ideas that shaped how the 1v1 Timer works.</p>
+      <p>Thanks to TulipErika for innovative ideas that shaped how the 1v1 Timer works, and for helping beta test the whole app.</p>
       <p><a href="https://www.twitch.tv/tuliperika" target="_blank" rel="noopener" style="color:#ff9d95;">TulipErika - Twitch</a></p>
     </div>
     <div class="legal-card">
@@ -2794,6 +2755,14 @@
       }
     });
     window.currentScreen = name;
+    // Tells main.js which screen is currently showing, so it can gate
+    // global hotkey dispatch: timer:* actions only fire while '1v1' is
+    // active, map:* actions only while 'maps' is active -- on any OTHER
+    // screen (including this app's own home/hub), NEITHER category
+    // fires, even while the game itself has focus. Sent on every screen
+    // change, not just to/from 1v1/maps, so leaving to e.g. hub also
+    // correctly disables both categories.
+    if(window.electronAPI && window.electronAPI.setActiveScreen) window.electronAPI.setActiveScreen(name);
     if(name === 'hub'){
       if(window.resetMoonwalkModule) window.resetMoonwalkModule();
       if(window.resetVaultModule) window.resetVaultModule();
@@ -4831,14 +4800,14 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
 
   // ---------- rebindable hotkeys ----------
   var HK_ACTIONS = [
-    { id:'startpause', label:'Start / Pause / Resume Key', def:'F1' },
+    { id:'startpause', label:'Start / Pause / Resume Key', def:'F1', hint:'Starts, pauses, or resumes the running timer' },
     { id:'startleft',  label:'Crouch Key',                  def:null },
     { id:'m1',         label:'M1 (Left Click)',             def:null },
-    { id:'reset',      label:'Reset Timer Key',            def:'F4' },
-    { id:'edit',       label:'Edit Names / Score Key',      def:'F3' },
-    { id:'swap',       label:'Swap Sides Key',             def:'F5' },
-    { id:'overlay',    label:'Show / Hide Overlay Key',     def:'F2' },
-    { id:'layout',     label:'Toggle Timer Position Key',   def:'F6' }
+    { id:'reset',      label:'Reset Timer Key',            def:'F4', hint:'Resets both timers back to zero' },
+    { id:'edit',       label:'Edit Names / Score Key',      def:'F3', hint:'Lets you type names and score directly on the overlay' },
+    { id:'swap',       label:'Swap Sides Key',             def:'F5', hint:'Swaps which side of the overlay each player is on' },
+    { id:'overlay',    label:'Show / Hide Overlay Key',     def:'F2', hint:'Shows or hides the whole overlay' },
+    { id:'layout',     label:'Toggle Timer Position Key',   def:'F6', hint:'Moves the overlay to the other side of the screen' }
   ];
 
   // ---------------------------------------------------------------------
@@ -5070,8 +5039,10 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
     if(window.pushHotkeysToMain) window.pushHotkeysToMain();
   }
 
+  var MOUSE_BUTTON_LABELS = { 'M1': 'M1 (Left Click)', 'M2': 'M2 (Right Click)', 'M4': 'M4 (Mouse Side 1)', 'M5': 'M5 (Mouse Side 2)' };
   function hkPretty(v){
     if(!v) return '\u2014';
+    if(MOUSE_BUTTON_LABELS[v]) return MOUSE_BUTTON_LABELS[v];
     if(v === ' ') return 'SPACE';
     return v.length === 1 ? v.toUpperCase() : v;
   }
@@ -5103,15 +5074,24 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
       if(window.playUIHover) window.playUIHover();
     });
 
-    keyBox.addEventListener('click', function(){
-      // Clicking again WHILE already listening for this exact slot binds
-      // M1 (the left mouse click itself) as the key -- this is what a
-      // click on the box actually *is*, so it doubles as "I want to use
-      // my mouse click here" once listening is already active. To back
-      // out without picking anything, press Escape instead (handled in
-      // the capture-phase keydown listener below), which is also what
-      // still happens if this click landed on a DIFFERENT box than the
-      // one currently listening (handled by the hkListening=a.id branch).
+    keyBox.addEventListener('mousedown', function(ev){
+      // mousedown, not click: a real click requires mouseup to land back
+      // on the same element, which a fast/natural press can miss if the
+      // hand drifts even slightly between press and release -- exactly
+      // what "works if I hold it, not if I press quickly" looks like.
+      // mousedown fires the instant the button goes down, with no such
+      // requirement, so it catches every press reliably regardless of
+      // speed.
+      if(ev.button !== 0) return; // left button only; right/middle handled elsewhere
+      // Clicking again WHILE already listening binds M1 directly, on the
+      // spot -- a press on the box IS a real M1 press, so this doubles as
+      // "use my mouse click here" the instant it happens, no dependency
+      // on the system-wide hook (started via the IPC relay just below)
+      // actually being up and running yet, which it may not be for a
+      // split second right after listening starts. M2/M4/M5 don't have
+      // this same race (opening the box is always a left-click, so it
+      // never overlaps with THEM), so they still go through the relay
+      // exclusively -- this is purely a fast path for M1 specifically.
       if(hkListening===a.id){
         HK_ACTIONS.forEach(function(other){
           if(other.id!==a.id && hkBinds[other.id]==='M1') hkBinds[other.id]=null;
@@ -5131,11 +5111,17 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
     if(hkListening===a.id){
       keyBox.classList.add('listening');
       keyBox.classList.remove('empty');
-      keyBox.textContent='Press a key... (or click again for M1)';
+      keyBox.textContent='Press a key or mouse button (M1/M2/M4/M5)...';
     }
 
     card.appendChild(head);
     card.appendChild(keyBox);
+    if(a.hint){
+      var hintEl=document.createElement('div');
+      hintEl.className='hk-hint';
+      hintEl.textContent=a.hint;
+      card.appendChild(hintEl);
+    }
     return card;
   }
 
@@ -5164,6 +5150,53 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
       hotkeysSuspendedForListening = false;
       if(window.pushHotkeysToMain) window.pushHotkeysToMain();
     }
+    // Tells main.js to relay mouse clicks (M1/M2/M4/M5) for capture while
+    // listening -- same "listening" condition as the suspension above,
+    // just a separate concern (this needs the shared hook actually
+    // running, which main.js decides for itself based on this flag).
+    if(window.electronAPI && window.electronAPI.setCapturingMouseButtons){
+      window.electronAPI.setCapturingMouseButtons(listening);
+    }
+  }
+
+  // Shared by both grids: a mouse button (M2/M4/M5) click, relayed from
+  // main.js while capturing is active, binds to whichever slot is
+  // currently listening -- timer's hkListening or maps' mapHkListening,
+  // whichever is set (only one can be at a time in practice, since
+  // opening either capture mode ends the other via hkBuild/mapHkBuild).
+  // M1 is deliberately excluded here: it's already bound instantly and
+  // reliably via the synchronous mousedown fast path on the box itself
+  // (see buildHkCard/mapHkBuild). Handling it here TOO meant a single M1
+  // press could get caught by both paths at once -- the fast path firing
+  // immediately, then this relayed copy of the same press arriving a
+  // moment later over IPC and re-processing it -- which is exactly what
+  // showed up as "sometimes slow, sometimes doesn't take" depending on
+  // how the two ended up racing.
+  if(window.electronAPI && window.electronAPI.onMouseButtonInput){
+    window.electronAPI.onMouseButtonInput(function(buttonName){
+      if(buttonName === 'M1') return;
+      if(hkListening){
+        var slotId = hkListening;
+        HK_ACTIONS.forEach(function(other){
+          if(other.id!==slotId && hkBinds[other.id]===buttonName) hkBinds[other.id]=null;
+        });
+        hkBinds[slotId] = buttonName;
+        hkListening = null;
+        hkSave();
+        hkBuild();
+        if(window.playModuleSelect) window.playModuleSelect();
+      } else if(mapHkListening){
+        var mSlotId = mapHkListening;
+        MAP_HK_ACTIONS.forEach(function(other){
+          if(other.id!==mSlotId && mapBinds[other.id]===buttonName) mapBinds[other.id]=null;
+        });
+        mapBinds[mSlotId] = buttonName;
+        mapHkListening = null;
+        mapHkSave();
+        mapHkBuild();
+        if(window.playModuleSelect) window.playModuleSelect();
+      }
+    });
   }
 
   function hkBuild(){
@@ -5303,7 +5336,7 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
 
   
 
-  // ---------- Maps / Cloaks module ----------
+  // ---------- Maps / Clocks module ----------
   // MAP_DATA is intentionally empty: layouts get added later.
   // Each entry: { name, poly:[[x,y],...] on a 12x12 grid, marks:[{t,x,y,w,h}], zones:[{t,x,y}] }
   // Images are embedded below (window.MAP_IMAGES) as base64 data URLs, so this
@@ -5446,7 +5479,20 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
     'Mothers Dwelling': "Mother's Dwelling",
     'Tricksters Delusion': "Trickster's Delusion",
     'Ironworks Of Misery': 'Ironworks of Misery',
-    'Ironworks Of Misery II': 'Ironworks of Misery II'
+    'Ironworks Of Misery II': 'Ironworks of Misery II',
+    // Without this override, the generic "turn a trailing s into 's"
+    // step further down (meant for cases like "Azarovs" -> "Azarov's")
+    // wrongly treats "Gas" as a possessive too, since it also ends in
+    // "s " -- producing "Ga's Heaven" instead of the correct "Gas
+    // Heaven" (as in gasoline, not a possessive of "Ga"). The raw file
+    // itself is already named correctly; only the auto-formatting was
+    // wrong.
+    'Gas Heaven': 'Gas Heaven',
+    // The raw file itself is misspelled ("Abbatoir", extra B, missing a
+    // T) -- the correct English word is "Abattoir" (one B, two Ts).
+    // Renaming the actual embedded image data isn't practical here, so
+    // this corrects only the displayed name.
+    'Rancid Abbatoir': 'Rancid Abattoir'
   };
 
   function prettyMapName(file){
@@ -5908,10 +5954,10 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
     // both defaulted to the same key, so only one of them could ever
     // actually register; nobody had likely noticed since map:toggle
     // simply silently lost that race every time).
-    { id:'toggle', label:'Show / Hide Overlay Key', def:'F10' },
-    { id:'rotate', label:'Rotate 90° Key',        def:'F7' },
-    { id:'detect', label:'Detect Map Key',           def:'F8' },
-    { id:'interact', label:'Cycle Map Version Key',   def:'F9' }
+    { id:'toggle', label:'Show / Hide Overlay Key', def:'F10', hint:'Shows or hides the map overlay' },
+    { id:'rotate', label:'Rotate 90° Key',        def:'F7', hint:'Rotates the map 90 degrees' },
+    { id:'detect', label:'Detect Map Key',           def:'F8', hint:'In game, press Tab then Detect' },
+    { id:'interact', label:'Cycle Map Version Key',   def:'F9', hint:'Switches to the map\'s next version, right to left' }
   ];
   var mapBinds = {};
   var mapHkListening = null;
@@ -5927,6 +5973,7 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
   }
   function mapHkPretty(v){
     if(!v) return '—';
+    if(MOUSE_BUTTON_LABELS[v]) return MOUSE_BUTTON_LABELS[v];
     if(v === ' ') return 'SPACE';
     return v.length === 1 ? v.toUpperCase() : v;
   }
@@ -5947,16 +5994,36 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
         mapBinds[a.id]=null; mapHkSave(); mapHkListening=null; mapHkBuild();
         if(window.playUIHover) window.playUIHover();
       });
-      keyBox.addEventListener('click', function(){
-        if(mapHkListening===a.id){ mapHkListening=null; mapHkBuild(); return; }
+      keyBox.addEventListener('mousedown', function(ev){
+        // mousedown, not click -- see buildHkCard's identical fast path
+        // above for why (a fast/natural press can miss a plain 'click'
+        // if the hand drifts even slightly between press and release).
+        if(ev.button !== 0) return;
+        if(mapHkListening===a.id){
+          MAP_HK_ACTIONS.forEach(function(other){
+            if(other.id!==a.id && mapBinds[other.id]==='M1') mapBinds[other.id]=null;
+          });
+          mapBinds[a.id]='M1';
+          mapHkListening=null;
+          mapHkSave();
+          mapHkBuild();
+          if(window.playModuleSelect) window.playModuleSelect();
+          return;
+        }
         mapHkListening=a.id; mapHkBuild();
         if(window.playUIHover) window.playUIHover();
       });
       if(mapHkListening===a.id){
         keyBox.classList.add('listening'); keyBox.classList.remove('empty');
-        keyBox.textContent='Press a key...';
+        keyBox.textContent='Press a key or mouse button (M1/M2/M4/M5)...';
       }
       card.appendChild(head); card.appendChild(keyBox);
+      if(a.hint){
+        var hintEl=document.createElement('div');
+        hintEl.className='hk-hint';
+        hintEl.textContent=a.hint;
+        card.appendChild(hintEl);
+      }
       mapHkGrid.appendChild(card);
     });
   }
@@ -6431,83 +6498,6 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
      console.error('[electron bridge] setup failed:', err);
    }
   }
-
-
-  // ---------- "why" info panels ----------
-  var INFO_CONTENT = {
-    moonwalk: {
-      title: 'Why to use the Moonwalk Trainer',
-      body: [
-        'Moonwalking is footwork, not luck. It comes down to holding a direction while alternating <b>A</b> and <b>D</b> on a steady beat &mdash; and the moment your rhythm drifts, the tech breaks.',
-        'This drill isolates exactly that skill. The metronome judges every press in <b>milliseconds</b>, so you find out whether you were early or late instead of just feeling that "it didn\'t work".',
-        'The <b>speed slider</b> lets you start slow and build up, with markers showing the tempos that matter in real matches. <b>Streak</b> and <b>Best</b> turn practice into something measurable across sessions.',
-        'Because it loops automatically, you can drill for minutes without touching anything &mdash; the failure message tells you what went wrong while the next attempt is already counting in.'
-      ]
-    },
-    vault: {
-      title: 'Why to use the Vault / Pallet trainer',
-      body: [
-        'Fast vaults and pallet drops are decided in a window measured in fractions of a second. Getting them wrong costs a chase; getting them right buys you a whole loop.',
-        'This drill trains the one thing that decides it: <b>reacting with the spacebar at the exact moment</b>, not a beat early out of nerves or a beat late out of hesitation.',
-        'The marker approaches from a <b>random side each time</b>, so you cannot memorise a rhythm and coast &mdash; you have to actually read it, the way you do in a real chase.',
-        'Feedback is specific: it tells you whether you were <b>too early or too late</b>, so you learn which way your instinct leans and correct it.',
-        'The <b>Sweet Spot</b> marker on the speed slider shows the tempo closest to real gameplay, and the automatic loop keeps you drilling without breaking focus.'
-      ]
-    },
-    timer: {
-      title: 'Why this 1v1 timer stands out',
-      body: [
-        'Most scoreboards give you one clock. This one gives each player <b>their own timer</b>, tied to them &mdash; swap sides and the times follow the players, exactly as you would expect.',
-        'Start it without touching your keyboard: bind a <b>Crouch key or your mouse\'s M1</b>, and the instant you can move, the timer is already running &mdash; no alt-tabbing, no fumbling for a function key mid-chase.',
-        'It warns you before it matters: when the running timer closes to within three seconds of the other, it <b>pulses red</b>, so you know a record is about to fall without staring at the numbers.',
-        'When both timers stop, the <b>leading player is highlighted</b> automatically &mdash; and on a dead tie, both are.',
-        'Everything is editable <b>directly on the overlay</b>: press the edit key and type names and score straight onto the bar, no alt-tabbing into a settings page.',
-        'The clock is timed independently in the background rather than by whatever you happen to be looking at, so it keeps counting &mdash; precisely, to the hundredth of a second &mdash; no matter what else is going on.',
-        'Every element can be recoloured independently, position, scale and hotkeys are all yours (a function key, a letter, Shift/Ctrl/Alt, even a mouse click &mdash; not just the obvious choices), and your whole setup is remembered between sessions.'
-      ]
-    },
-    maps: {
-      title: 'Why this map overlay stands out',
-      body: [
-        'Callouts only help if you can find them instantly. This overlay puts the <b>clock numbers, main building and shack</b> on screen while you play, so you can name your position without thinking.',
-        'Search by name to pull up any map in a second, and keep the overlay exactly where you want it with <b>position, size and opacity</b> controls.',
-        'Maps with multiple layouts &mdash; Ormond, Coal Tower, Badham Preschool, and others &mdash; are not a guessing game: small <b>version dots</b> let you pick the exact one in a tap, right on the in-game overlay itself, not just inside the app.',
-        '<b>Rotate the map</b> with a keypress to line it up with the direction you are actually facing &mdash; far easier to read than mentally flipping it.',
-        'Every action is on a <b>rebindable hotkey</b>, so you never have to leave the game to change anything.',
-        'The <b>auto-detect key</b> is built for the desktop app: it reads the map name straight off the game screen and switches the overlay for you &mdash; telling apart which specific layout you are on, not just which map, with no manual picking at all.'
-      ]
-    }
-  };
-
-  var infoModal = document.getElementById('infoModal');
-  var infoTitle = document.getElementById('infoTitle');
-  var infoBody = document.getElementById('infoBody');
-
-  window.openInfo = function(key){
-    var d = INFO_CONTENT[key];
-    if(!d) return;
-    infoTitle.textContent = d.title;
-    infoBody.innerHTML = d.body.map(function(p){ return '<p>'+p+'</p>'; }).join('');
-    infoModal.classList.add('open');
-    if(window.playModuleSelect) window.playModuleSelect();
-  };
-  window.closeInfo = function(e){
-    if(e && e.target && e.target !== infoModal && e.type === 'click' && e.target.id !== 'infoModal'){
-      if(e.currentTarget !== infoModal) return;
-    }
-    infoModal.classList.remove('open');
-  };
-  window.addEventListener('keydown', function(e){
-    if(e.key === 'Escape' && infoModal.classList.contains('open')){
-      infoModal.classList.remove('open');
-    }
-  });
-  document.querySelectorAll('.info-btn').forEach(function(b){
-    b.addEventListener('mouseenter', function(){
-      if(window.resumeAudioIfNeeded) window.resumeAudioIfNeeded();
-      if(window.playUIHover) window.playUIHover();
-    });
-  });
 
   statBpm.textContent=bpm;
   loop();
