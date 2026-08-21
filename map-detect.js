@@ -59,20 +59,30 @@ function normalize(s) {
 // Wrath II, Shelter Woods II, Suffocation Pit II, and Family Residence II
 // all end in a Roman numeral too. A plain literal alias for "ii"/"iii"
 // alone isn't reliable enough on its own, so this instead: strips
-// whatever trailing numeral-like suffix (Roman, its digit-doubled OCR
-// misread, or a correct Arabic digit) is on the OCR text, converts it to
-// a variant number, then looks for a map whose OWN name -- after the
-// exact same trailing-numeral stripping -- matches the same base words
-// AND variant number. That last part is what makes this work for Badham
-// (whose app-internal names use Arabic digits already, e.g. "Badham
-// Preschool 2") as well as maps like Ormond (whose app-internal names use
-// the Roman numeral directly, e.g. "Ormond II") with the same code path.
+// whatever trailing numeral-like suffix (Roman, or its digit-doubled OCR
+// misread) is on the OCR text, converts it to a variant number, then
+// looks for a map whose OWN name -- after the exact same trailing-numeral
+// stripping -- matches the same base words AND variant number. That last
+// part is what makes this work for Badham (whose app-internal names use
+// Arabic digits already, e.g. "Badham Preschool 2") as well as maps like
+// Ormond (whose app-internal names use the Roman numeral directly, e.g.
+// "Ormond II") with the same code path.
+//
+// Deliberately only multi-character entries here (length 2+): a bare
+// single character or digit ("i", "1", "2", "v"...) as the trailing word
+// is exactly the kind of thing stray OCR noise produces on a map that has
+// NO number in-game at all -- a smudge or a misread letter landing as an
+// isolated "1" or "2" at the end of the recognized text. That was
+// confirmed the hard way: maps with no numbered variant were sometimes
+// landing on version 2 or 3 instead of correctly falling through to the
+// no-suffix default, purely because of one stray character. Real DBD
+// Roman numerals in OCR text (or their doubled-digit misread) are always
+// at least two characters, so requiring that length is a strong, cheap
+// filter against exactly this kind of noise.
 var NUMERAL_SUFFIX_TO_VARIANT = {
-  'i': 1, '1': 1,
-  'ii': 2, '11': 2, '2': 2,
-  'iii': 3, '111': 3, '3': 3,
-  'iv': 4, '1111': 4, '4': 4,
-  'v': 5, '5': 5
+  'ii': 2, '11': 2,
+  'iii': 3, '111': 3,
+  'iv': 4, '1111': 4
 };
 
 // Returns { base: 'ormond', variant: 2 } for "ormond ii" / "ormond 11" /
