@@ -1,57 +1,41 @@
+[README.md](https://github.com/user-attachments/files/31312312/README.md)
 # DBD Surv Trainer
 
-App desktop non ufficiale per allenarsi lato survivor in Dead by Daylight — timer 1v1 con overlay in game, callout orari per le mappe, moonwalk trainer e altro.
+Unofficial desktop tool for Dead by Daylight survivor training — 1v1 timer with an in-game overlay, clock callouts for maps, a moonwalk trainer, and more.
 
-Non è affiliata con, approvata da, o collegata a Behaviour Interactive. Dead by Daylight e tutti i nomi correlati sono marchi di Behaviour Interactive Inc.
+Not affiliated with, endorsed by, or connected to Behaviour Interactive in any way. Dead by Daylight and all related names are trademarks of Behaviour Interactive Inc.
 
 ## Download
 
-Scarica l'ultima versione dalla pagina **[Releases](../../releases)** di questo repository — prendi il file `DBD Surv Trainer Setup X.X.X.exe` e installalo come qualsiasi altro programma Windows.
+Grab the latest version from the **[Releases](../../releases)** page of this repository — download `DBD Surv Trainer Setup X.X.X.exe` and install it like any other Windows program.
 
-Non è firmata digitalmente, quindi Windows potrebbe mostrare un avviso SmartScreen ("Windows ha protetto il PC") al primo avvio dell'installer: clicca **"Ulteriori informazioni"** poi **"Esegui comunque"**.
+It isn't digitally signed, so Windows may show a SmartScreen warning ("Windows protected your PC") the first time you run the installer: click **"More info"** then **"Run anyway"**.
 
-## Cosa fa
+## What it does
 
-- **Timer 1v1** con scoreboard overlay, sempre in primo piano sopra al gioco, editabile in game
-- **Overlay mappe** con callout orari (da [Hens' Callouts](https://hens333.com/callouts), usati con permesso), rilevamento automatico della mappa via OCR
-- **Moonwalk trainer** e **vault/pallet timing trainer**
-- Hotkey da **tastiera**, **mouse (M1)** e **controller Xbox (XInput)**, tutte riassegnabili liberamente
-- Colori, posizione, dimensione e opacità dell'overlay tutti personalizzabili
+- **1v1 Timer** with a scoreboard overlay, always on top of the game, editable in-game
+- **Map overlay** with clock callouts (from [Hens' Callouts](https://hens333.com/callouts), used with permission), automatic map detection via OCR
+- **Moonwalk trainer** and **vault/pallet timing trainer**
+- **Keyboard**, **mouse (M1)**, and **Xbox controller (XInput)** hotkeys, all freely rebindable
+- Fully customizable overlay colors, position, size, and opacity
 
-## Un avviso sulle hotkey Shift / M1
+## A note on the Shift / M1 hotkeys
 
-L'app offre, come opzione **facoltativa e disattivata di default**, la possibilità di avviare il timer premendo Shift o il tasto sinistro del mouse (M1), oltre ai normali tasti F1-F12. Per farlo, mentre quell'opzione è attiva, l'app ascolta a livello di sistema la pressione di quei tasti specifici — una tecnica nella stessa categoria di programmi come AutoHotkey, che in alcuni giochi con anti-cheat (incluso, in alcuni contesti, EasyAntiCheat) è stata segnalata come rilevata.
+As an **optional feature, off by default**, the app can start the timer by pressing Shift or the left mouse button (M1), in addition to the regular F1-F12 keys. To do this, while that option is enabled, the app listens system-wide for those specific key presses — a technique in the same general category as programs like AutoHotkey, which has been reported as detected in some games with anti-cheat systems (including, in some contexts, EasyAntiCheat).
 
-Un altro tool diffuso per Dead by Daylight con una funzione simile (avviare un timer 1v1 con Shift), "DBD 1v1 Timer", ha dichiarato pubblicamente di usare la stessa categoria di tecnica — a conferma che è un approccio non isolato in questo tipo di strumenti, anche se questo non è comunque una garanzia di sicurezza.
+Another popular Dead by Daylight tool with a similar feature (starting a 1v1 timer with Shift), "DBD 1v1 Timer," has publicly stated it uses the same category of technique — confirming this isn't an isolated approach among tools like this, though that's still not a safety guarantee either way.
 
-**Punti importanti:**
-- Questo riguarda **solo** chi attiva esplicitamente l'opzione "Enable a dedicated Crouch/M1 key" e assegna Shift o M1 a un'azione. Se non la attivi, quella parte di codice non si avvia mai sul tuo PC.
-- Usando **solo** le hotkey normali (tasti F, riassegnabili liberamente) e il **controller**, questa categoria di rischio non si applica: quelle tecniche funzionano in modo diverso (scorciatoie di sistema standard, o lettura periodica dello stato del controller via XInput, la stessa API usata dai giochi stessi).
-- Il rischio concreto non è quantificabile con certezza — potrebbe essere basso in pratica, ma non è possibile escluderlo del tutto.
+**Important points:**
+- This only applies to people who explicitly enable the "Enable a dedicated Crouch/M1 key" option and bind Shift or M1 to an action. If you never enable it, that part of the code never runs on your PC at all.
+- Using **only** the regular hotkeys (F-keys, freely rebindable) and the **controller**, this category of risk doesn't apply: those work through a different mechanism entirely (standard system shortcuts, or periodic polling of the controller's state via XInput, the same API games themselves use).
+- The actual risk can't be quantified with certainty — it may well be low in practice, but it can't be ruled out entirely either.
 
-**Esclusione di responsabilità:** questo software viene fornito "così com'è", senza alcuna garanzia. L'uso della funzione Shift/M1 è una scelta volontaria di chi la attiva. L'autore non si assume alcuna responsabilità per eventuali provvedimenti (ban, sospensioni, o altro) presi dall'anti-cheat o dallo sviluppatore del gioco nei confronti di chi usa questa o qualsiasi altra parte dell'app.
+**Disclaimer:** this software is provided "as is," with no warranty of any kind. Using the Shift/M1 feature is a voluntary choice made by whoever enables it. The author accepts no responsibility for any action (bans, suspensions, or otherwise) taken by the game's anti-cheat or developer against anyone using this or any other part of the app.
 
-## Segnalare un problema
+## Reporting an issue
 
-Se qualcosa non funziona, apri una [Issue](../../issues) su questo repository descrivendo cosa succede — più dettagli dai (screenshot, cosa ti aspettavi, cosa è successo davvero) più è facile risolverlo.
+If something isn't working, open an [Issue](../../issues) on this repository describing what's happening — the more detail you give (screenshots, what you expected, what actually happened), the easier it is to fix.
 
-## Crediti
+## Credits
 
-Vedi la sezione Credits dentro l'app stessa per l'elenco completo dei ringraziamenti.
-
-## Per sviluppatori — far girare il codice sorgente
-
-Serve **Node.js** (https://nodejs.org, versione LTS va bene). Dentro questa cartella:
-
-```
-npm install
-npm start
-```
-
-Per creare un installer da zero:
-
-```
-npm run dist
-```
-
-L'installer finito compare dentro la cartella `dist`.
+See the Credits section inside the app itself for the full list of acknowledgments.
