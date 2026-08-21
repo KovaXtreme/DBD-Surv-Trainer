@@ -1,0 +1,46 @@
+{
+  "name": "dbd-surv-trainer",
+  "productName": "DBD Surv Trainer",
+  "version": "0.1.0",
+  "description": "Survivor training tools and in-game overlays for Dead by Daylight.",
+  "author": "KovaXtreme",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder"
+  },
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3",
+    "cross-env": "^7.0.3"
+  },
+  "dependencies": {
+    "tesseract.js": "^5.1.0",
+    "uiohook-napi": "^1.5.4",
+    "active-win": "^9.0.0",
+    "koffi": "^2.9.0"
+  },
+  "build": {
+    "appId": "com.dbdsurvtrainer.app",
+    "productName": "DBD Surv Trainer",
+    "files": [
+      "main.js",
+      "preload.js",
+      "map-detect.js",
+      "renderer/**/*",
+      "build/**/*"
+    ],
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/koffi/**/*",
+      "node_modules/uiohook-napi/**/*",
+      "node_modules/active-win/**/*",
+      "node_modules/tesseract.js/**/*",
+      "node_modules/tesseract.js-core/**/*"
+    ],
+    "win": {
+      "icon": "build/icon.ico",
+      "target": "nsis"
+    }
+  }
+}
