@@ -117,6 +117,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('overlay-edit-update', (_event, payload) => callback(payload));
   },
 
+  // Called by the TIMER OVERLAY window when a drag (repositioning the
+  // bar while unlocked) ends there, to relay the final position back to
+  // the main window -- same source-of-truth pattern as the name/score
+  // edits above, since the main window owns saving position to
+  // localStorage and its own settings panel needs to reflect it too.
+  sendOverlayPositionUpdate: (payload) => ipcRenderer.send('overlay-position-update', payload),
+
+  // Called by the MAIN window to receive that position update.
+  onOverlayPositionUpdate: (callback) => {
+    ipcRenderer.on('overlay-position-update', (_event, payload) => callback(payload));
+  },
+
   // Called by the MAP OVERLAY window when a version dot is clicked
   // directly on the in-game overlay, to relay that pick back to the main
   // window (which owns mapCurrent, same source-of-truth pattern as the
