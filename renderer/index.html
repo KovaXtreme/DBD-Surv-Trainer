@@ -39,7 +39,7 @@
 <title>DBD Surv Trainer</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;700;800&family=Cinzel:wght@600;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;700;800&family=Cinzel:wght@600;800&family=Digital+Numbers&display=swap" rel="stylesheet">
 <style>
   /* ---- overlay window isolation ---- */
   /* Everything below is invisible in a normal browser tab (no ?view=
@@ -1474,6 +1474,91 @@
     border: 2px solid transparent;
   }
   .ov-swatch.selected { border-color: #f2e6de; box-shadow: 0 0 12px rgba(255,255,255,0.35); }
+  .ov-swatch-disabled { cursor: not-allowed; }
+  /* Separates the metallic swatch row from the flat-color one above it --
+     a plain horizontal rule plus a small label, nothing fancier needed
+     since the swatches themselves already make the two rows visually
+     distinct (flat fills vs. the diagonal metallic sheen). */
+  .ov-swatch-divider {
+    width: 100%;
+    height: 1px;
+    background: rgba(255,255,255,0.12);
+    margin: 14px 0 8px;
+  }
+  .ov-swatch-section-label {
+    text-align: center;
+    font-size: 11px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: #8d7d76;
+  }
+  /* Collapsible palette section (Metallic/Neon), hidden by default --
+     collapsed is the default specifically so having the metallic/neon
+     sections available at all doesn't mean always paying for their full
+     height too. The toggle row itself reuses .ov-switch-row/.ov-switch
+     (see buildCollapsibleRow), same label-left/switch-right layout as
+     Auto-score/Lock Overlay Position elsewhere in this panel. */
+  .ov-swatch-collapsible {
+    display: none;
+    width: 100%;
+  }
+  .ov-swatch-collapsible.open {
+    display: flex;
+  }
+  /* Pill-shaped on/off switch (dark track, round knob that slides and
+     turns green when on) -- a visually distinct style from the app's
+     existing text-label toggles (like the "Overlay: HIDDEN/SHOWN"
+     button), used specifically for the two settings that replaced the
+     old Position X/Y sliders: a real physical switch reads more clearly
+     as "this is a binary on/off setting" than a slider ever could for
+     something that isn't actually a continuous value anymore. */
+  .ov-switch-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 10px 2px;
+  }
+  .ov-switch-label {
+    font-size: 13px;
+    color: #cfc2ba;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .ov-switch-label .ov-switch-sub {
+    color: #8d7d76;
+    font-size: 12px;
+  }
+  .ov-switch {
+    position: relative;
+    width: 44px;
+    height: 24px;
+    flex: none;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.14);
+    border: 1px solid rgba(255,255,255,0.18);
+    cursor: pointer;
+    transition: background 0.18s ease, border-color 0.18s ease;
+  }
+  .ov-switch::after {
+    content: '';
+    position: absolute;
+    top: 2px; left: 2px;
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    background: #f2e6de;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.5);
+    transition: transform 0.18s ease, background 0.18s ease;
+  }
+  .ov-switch.on {
+    background: rgba(60,200,140,0.9);
+    border-color: rgba(60,200,140,0.9);
+  }
+  .ov-switch.on::after {
+    transform: translateX(20px);
+    background: #ffffff;
+  }
 #screen-1v1 .bpm-row {
     display: flex;
     align-items: center;
@@ -1528,16 +1613,27 @@
     font-family: 'Chakra Petch', sans-serif;
   }
   .ov-bar.show { display: flex; }
+  /* A single, plain dashed square around the bar while unlocked -- purely
+     a "you can drag this" indicator, deliberately ONE consistent look
+     (no color change for snap-proximity, no red/green states) since
+     that's specifically what read as distracting/buggy-looking before.
+     outline (not border) doesn't affect layout, so this can toggle on
+     and off without shifting the bar's own position at all. */
+  .ov-bar.positioning {
+    outline: 2px dashed rgba(242,230,222,0.55);
+    outline-offset: 10px;
+    cursor: move;
+  }
   .ov-bar.show.stacked {
     display: grid;
-    grid-template-columns: 174px 104px 174px;
+    grid-template-columns: 230px 140px 230px;
     grid-template-areas: "core core core" "t1 sp t2";
     row-gap: 8px;
     column-gap: 0;
   }
   .ov-bar.stacked .ov-bar-core { grid-area: core; justify-self: center; }
-  .ov-bar.stacked #ovTimerP1 { grid-area: t1; justify-self: center; margin: 0; }
-  .ov-bar.stacked #ovTimerP2 { grid-area: t2; justify-self: center; margin: 0; }
+  .ov-bar.stacked #ovTimerP1Box { grid-area: t1; justify-self: center; margin: 0; }
+  .ov-bar.stacked #ovTimerP2Box { grid-area: t2; justify-self: center; margin: 0; }
   .ov-bar-core {
     display: flex;
     align-items: stretch;
@@ -1570,22 +1666,47 @@
        :last-child), this is just the fallback/base value. */
     border-radius: 999px;
     border: 2px solid var(--ov-outline, rgba(255,255,255,0.85));
-    background: rgba(23,20,21,0.92);
-    backdrop-filter: blur(10px);
+    background: rgba(23,20,21,0.55);
+    /* backdrop-filter:blur() removed -- a repeatedly reported hard/sharp
+       shadow specifically here, triggered by an unrelated color change
+       elsewhere (Timer text, of all things) after toggling Outline off
+       and back on, was never reproducible in this environment despite
+       trying every combination described -- that specific pattern
+       (hardware/GPU-dependent, appearing after a repaint gets triggered
+       by something unrelated) matches a known category of Chromium
+       compositing glitches where backdrop-filter's own separate layer
+       doesn't recompute cleanly against a box that also has box-shadow
+       and asymmetric border-radius (see this same box's own corner-radius
+       comment further down -- already a known trouble spot for exactly
+       that combination once before). Removing it is a real trade-off
+       (loses the blur-what's-behind-it effect) for a fix I can't verify
+       firsthand, but the background here is already fairly opaque
+       (0.55 alpha) on its own, so the practical loss should be minor. */
     box-shadow: 0 6px 28px rgba(0,0,0,0.6), 0 0 26px rgba(180,20,30,0.18);
     color: #f2e6de;
     font-weight: 700;
-    font-size: 22px;
+    font-size: 25px;
     letter-spacing: 2px;
-    padding: 12px 25px;
+    padding: 12px 10px;
     display: flex;
     align-items: center;
     text-transform: uppercase;
     white-space: nowrap;
-    width: 174px;
+    width: 230px;
     flex: none;
     overflow: hidden;
     justify-content: center;
+  }
+  /* Height-only growth for the name text itself, same idea as the score
+     numbers/dash below -- see that comment for the reasoning. Targets
+     the INNER span specifically (not .ov-bar-name itself), so only the
+     text stretches vertically, not the bordered pill shape around it.
+     1.1379 matches the score's own factor since both start from the same
+     25px font size and 29px measured height (two rounds of +2px each,
+     applied cumulatively from that same original base -- +4px total). */
+  #ovBarP1Name, #ovBarP2Name {
+    display: inline-block;
+    transform: scaleY(1.2069);
   }
   /* Player 1 (first): rounded on its outer/left side, square on the side
      facing the score box. Player 2 (last): the mirror image -- square
@@ -1597,13 +1718,28 @@
      edge meant the 10px corner got scaled down to a near-invisible
      fraction of a pixel by that same math, which is exactly why it was
      rendering as a hard square instead of the intended small rounded
-     corner. 30px is already far more than half this box's own height (so
-     it still clamps into a full pill curve on its own, same visual result
-     as 999px would give alone) without being so disproportionate to 10px
-     that the browser's own overlap-prevention math flattens the smaller
-     one to nothing. */
-  .ov-bar-core .ov-bar-name:first-child { border-radius: 30px 10px 10px 30px; }
-  .ov-bar-core .ov-bar-name:last-child  { border-radius: 10px 30px 30px 10px; }
+     corner.
+     28.5px specifically -- this box is 57px tall, so 28.5px IS exactly
+     half its height, the largest a border-radius can be here at all
+     before the browser clamps it down to that same half-height value
+     regardless of what's asked for. A PREVIOUS version of this comment
+     reasoned that landing exactly on that half-height value was itself
+     the problem (a "perfect semicircle" precision edge case) and
+     deliberately backed off to 27px specifically to avoid it -- that
+     reasoning was wrong, confirmed directly against a real reported
+     screenshot: 27px is LESS than half the height, which means the
+     curve is no longer a true, continuous semicircle at all -- there's
+     a real ~3px perfectly STRAIGHT segment sitting in the middle of what
+     should be a smooth arc (57 - 2*27 = 3), which is exactly the "the
+     rounded end has a flat/straight edge instead of following the true
+     oval" defect that got reported, not a rendering-precision artifact.
+     28.5px removes that flat segment entirely -- the curve is a true,
+     complete semicircle again, same as plain "30px" (or any value at or
+     above the 28.5px ceiling) would give via the browser's own clamping,
+     just expressed as the exact value directly instead of relying on
+     that clamp. */
+  .ov-bar-core .ov-bar-name:first-child { border-radius: 28.5px 10px 10px 28.5px; }
+  .ov-bar-core .ov-bar-name:last-child  { border-radius: 10px 28.5px 28.5px 10px; }
   .ov-bar-score {
     position: relative;
     /* Deliberately rectangular (not the fully-rounded 999px pill the two
@@ -1611,19 +1747,30 @@
        rectangle, pill, not three matching pills. */
     border-radius: 10px;
     border: 2px solid var(--ov-outline, rgba(255,255,255,0.85));
-    background: rgba(23,20,21,0.92);
-    backdrop-filter: blur(10px);
+    background: rgba(23,20,21,0.55);
+    /* backdrop-filter:blur() removed here too -- same reasoning as the
+       name boxes just above. */
     box-shadow: 0 6px 28px rgba(0,0,0,0.6), 0 0 26px rgba(180,20,30,0.18);
     color: #ffffff;
     font-weight: 700;
-    font-size: 23px;
-    letter-spacing: 2px;
-    padding: 12px 20px;
+    /* Fixed at exactly 25px, deliberately excluded from fitAllPillText's
+       auto-shrink (see that function below). The score now caps at 3
+       digits per side (see changeScore/ovSyncFromBar), and the box
+       itself was widened to 140px specifically to fit that worst case
+       ("999 - 999") comfortably at this same 25px -- verified by
+       measuring scrollWidth vs clientWidth directly rather than
+       eyeballing one example score. Padding and letter-spacing stay
+       tightened from their original values too (an earlier round of
+       this same fitting problem, back when the cap was still 2 digits
+       and the box hadn't been widened yet). */
+    font-size: 25px;
+    letter-spacing: 0px;
+    padding: 12px 6px;
     display: flex;
     align-items: center;
     justify-content: center;
     white-space: nowrap;
-    width: 104px;
+    width: 140px;
     flex: none;
     overflow: hidden;
   }
@@ -1631,37 +1778,102 @@
     user-select: none;
     -webkit-user-select: none;
     cursor: default;
+    display: inline-block;
+    /* Height-only growth, matching the score numbers on either side --
+       see the comment on #ovScoreP1Num/#ovScoreP2Num below for why
+       transform:scaleY (not font-size) is what achieves that. */
+    transform: scaleY(1.3448);
   }
+  /* Fixed, equal width for BOTH number spans (enough for 2 digits,
+     matching the 3-digit cap on the score itself) with centered text
+     inside each -- without this, a lopsided score like "33 - 3" put the
+     dash off-center: centering the score box's content as one whole
+     group centers the TOTAL text length, not the dash's position
+     specifically, so a wider left number visibly pushed the dash toward
+     the right. Giving each number its own equal-width slot means the
+     dash sits exactly between two same-size boxes regardless of how many
+     digits either side actually has. */
+  #ovScoreP1Num, #ovScoreP2Num {
+    display: inline-block;
+    width: 1.8em;
+    text-align: center;
+    /* Height-only growth (+10px total, five +2px rounds applied
+       cumulatively from the original base height), width untouched -- a
+       plain font-size bump would have grown both together. transform:
+       scaleY stretches just the glyphs vertically from their own center,
+       which combined with this element's already-centered position
+       inside the flex box (and the box's own size staying fixed) keeps
+       everything reading as centered rather than shifting up or down.
+       1.3448 = (29px original height + 10px) / 29px, measured directly
+       rather than guessed. */
+    transform: scaleY(1.3448);
+  }
+  /* The OUTER box now: just the background plate (padding/radius/sizing),
+     completely undistorted by any transform. The INNER .ov-side-timer-text
+     span (below) holds the actual glyphs and gets the height-stretch
+     transform instead -- keeping them on separate elements is exactly
+     what fixes the "squared-off/distorted corners" bug a non-uniform
+     scaleY caused when it was applied to a single element that ALSO had
+     border-radius: stretching only the Y axis warps a radius that was
+     sized assuming a normal, unstretched box, since border-radius has no
+     way to know to compensate for a transform applied to the same box.
+     Splitting them means the radius is drawn on a box that is NEVER
+     transformed at all, so it always renders as the plain, correct
+     rounded shape regardless of how tall the text inside stretches. */
   .ov-side-timer {
-    font-family: 'Chakra Petch', sans-serif;
-    font-weight: 800;
-    font-size: 27px;
-    letter-spacing: 1px;
-    color: #f2e6de;
-    background: none;
-    text-shadow: 0 2px 10px rgba(0,0,0,0.9), 0 0 18px rgba(0,0,0,0.7);
+    /* No background/padding/border-radius anymore -- removed on request,
+       plain and simple: just a floating number again, nothing behind it.
+       Kept as a wrapper element (rather than removing the extra div
+       entirely) purely so the inner .ov-side-timer-text span still has
+       something non-transformed to sit inside, matching the structure
+       the corner-distortion fix relies on. */
     white-space: nowrap;
     min-width: 108px;
     text-align: center;
+    display: inline-block;
+  }
+  .ov-side-timer-text {
+    /* A true 7-segment/LCD-style face for these specifically -- the rest
+       of the app's timer displays stay on Chakra Petch, this is just for
+       the two running-time numbers. Comes from the same Google Fonts
+       family already loaded above (see the <link> in <head>), so this
+       introduces no new dependency beyond what the app already relies
+       on for its other two fonts. Only ships one weight (400) -- font-
+       weight left off entirely rather than requesting 800, which this
+       family doesn't have and would just silently fall back from anyway;
+       the segmented letterforms already read as plenty bold on their
+       own without needing an unavailable bold weight. */
+    font-family: 'Digital Numbers', 'Chakra Petch', monospace;
+    font-size: 34px;
+    letter-spacing: 1px;
+    color: #f2e6de;
+    text-shadow: 0 0 3px rgba(0,0,0,0.6);
     transition: color 0.15s ease, text-shadow 0.15s ease;
+    display: inline-block;
+    /* Small downward nudge, requested alongside the +2px size bump above
+       -- margin-top (not part of the transform below) so it just shifts
+       this element's own box down within the outer .ov-side-timer, not
+       interacting with or getting multiplied by the scaleY stretch the
+       way a translateY bundled into that same transform would. */
+    margin-top: 4px;
+    /* Same height-only growth as the score/name text -- see that comment
+       elsewhere. 1.1081 = (37px original height + 4px) / 37px (two +2px
+       rounds applied cumulatively from that same original base). Safe to
+       scale directly now that this is its own element with no box shape
+       of its own to distort (the outer .ov-side-timer, which DOES have a
+       shape, is never itself transformed). */
+    transform: scaleY(1.1622);
   }
-  .ov-side-timer.active {
-    text-shadow: 0 2px 10px rgba(0,0,0,0.9), 0 0 22px var(--ov-self-glow, rgba(217,86,79,0.7));
+  .ov-side-timer-text.active {
+    text-shadow:
+      0 0 3px rgba(0,0,0,0.6),
+      0 0 22px var(--ov-self-glow, rgba(217,86,79,0.7));
   }
-  /* The heavy near-black double shadow above reads fine over a single
-     solid colour, but visibly muddies a rainbow gradient's actual clipped
-     text -- .ov-bar-name has no such shadow at all, which is exactly why
-     rainbow names came out noticeably brighter/cleaner than rainbow timer
-     digits did. Went further here than the first attempt (which still
-     read as too dark): almost no shadow at all now, just the faintest
-     touch for edge definition against a busy background, since these
-     digits are large/bold enough to stay legible on their own without
-     needing a heavy dark backing. */
-  .ov-side-timer.rainbow-text {
-    text-shadow: 0 0 2px rgba(0,0,0,0.35);
+  .ov-side-timer-text.active.rainbow-text {
+    text-shadow: 0 0 3px rgba(0,0,0,0.6), 0 0 16px rgba(255,255,255,0.55);
   }
-  .ov-side-timer.active.rainbow-text {
-    text-shadow: 0 0 2px rgba(0,0,0,0.35), 0 0 16px rgba(255,255,255,0.55);
+  .ov-side-timer-text.active.metallic-text {
+    text-shadow: 0 0 3px rgba(0,0,0,0.6), 0 0 16px rgba(255,255,255,0.55);
   }
   .ov-bar-name.editing,
   .ov-bar-score.editing {
@@ -1854,7 +2066,7 @@
     0%, 100% { color: var(--ov-self, #f2e6de); text-shadow: 0 2px 10px rgba(0,0,0,0.9), 0 0 18px rgba(0,0,0,0.7); }
     50%      { color: var(--ov-win, #ff4a3d); text-shadow: 0 2px 10px rgba(0,0,0,0.9), 0 0 26px var(--ov-win-soft, rgba(224,58,47,0.95)); }
   }
-  .ov-side-timer.warning:not(.rainbow-win) {
+  .ov-side-timer-text.warning:not(.rainbow-win) {
     animation: ovWarnBlink 0.55s ease-in-out infinite;
   }
   /* Rainbow version of the same "closing in" blink: var(--ov-win) is
@@ -1883,10 +2095,10 @@
     91.6% { color: #750787; text-shadow: 0 2px 10px rgba(0,0,0,0.9), 0 0 26px rgba(117,7,135,0.95); }
     100%  { color: var(--ov-self, #f2e6de); text-shadow: 0 2px 10px rgba(0,0,0,0.9), 0 0 18px rgba(0,0,0,0.7); }
   }
-  .ov-side-timer.warning.rainbow-win {
+  .ov-side-timer-text.warning.rainbow-win {
     animation: ovWarnBlinkRainbow 3.3s ease-in-out infinite;
   }
-  .ov-side-timer.leading:not(.rainbow-win) {
+  .ov-side-timer-text.leading:not(.rainbow-win) {
     /* !important is genuinely needed here (not just leftover caution):
        the timer's own individual color (t1/t2, see applyTextColor) is
        set as an INLINE style, which normally beats any stylesheet rule
@@ -1917,7 +2129,7 @@
     83.3%{ color: #750787; text-shadow: 0 2px 10px rgba(0,0,0,0.9), 0 0 26px rgba(117,7,135,0.95); }
     100% { color: #e40303; text-shadow: 0 2px 10px rgba(0,0,0,0.9), 0 0 26px rgba(228,3,3,0.95); }
   }
-  .ov-side-timer.leading.rainbow-win {
+  .ov-side-timer-text.leading.rainbow-win {
     animation: ovRainbowWinTimer 6s linear infinite;
   }
   .ov-bar-name.leading {
@@ -2035,10 +2247,8 @@
   .maps-search:focus { border-color: rgba(255,255,255,0.42); }
   .maps-list {
     display: flex; flex-direction: column; gap: 6px;
-    max-height: 430px; overflow-y: auto; padding-right: 5px;
+    max-height: 430px; overflow-y: auto; padding-right: 12px;
   }
-  .maps-list::-webkit-scrollbar { width: 6px; }
-  .maps-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.14); border-radius: 3px; }
   .map-item {
     padding: 10px 14px; border-radius: 9px;
     background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1);
@@ -2149,6 +2359,19 @@
     pointer-events: none;
   }
   .map-ov.show { display: block; }
+  /* Same idea as .ov-bar.positioning for the timer -- a plain dashed
+     square + move cursor purely as a "you can drag this" indicator, no
+     color change for snap state. Also flips pointer-events to auto (the
+     overlay is pointer-events:none by default so it never blocks clicks
+     to the game underneath, same reasoning noted on .maps-version-dots
+     above) since without that, a click here wouldn't register as a drag
+     start at all while unlocked. */
+  .map-ov.positioning {
+    pointer-events: auto;
+    cursor: move;
+    outline: 2px dashed rgba(242,230,222,0.55);
+    outline-offset: 10px;
+  }
   .map-ov svg { width: 100%; height: auto; aspect-ratio: 1 / 1; display: block; }
   .maps-credit {
     text-align: center;
@@ -2227,13 +2450,13 @@
 </div>
 
 <div id="ovBar" class="ov-bar">
-  <div class="ov-side-timer" id="ovTimerP1">0:00</div>
+  <div class="ov-side-timer" id="ovTimerP1Box"><span class="ov-side-timer-text" id="ovTimerP1">0:00</span></div>
   <div class="ov-bar-core">
     <div class="ov-bar-name" id="ovBarP1"><span id="ovBarP1Name">PLAYER 1</span></div>
     <div class="ov-bar-score" id="ovBarScore"><span id="ovScoreP1Num">0</span><span class="ov-score-dash-inline" contenteditable="false">&nbsp;&ndash;&nbsp;</span><span id="ovScoreP2Num">0</span></div>
     <div class="ov-bar-name" id="ovBarP2"><span id="ovBarP2Name">PLAYER 2</span></div>
   </div>
-  <div class="ov-side-timer" id="ovTimerP2">0:00</div>
+  <div class="ov-side-timer" id="ovTimerP2Box"><span class="ov-side-timer-text" id="ovTimerP2">0:00</span></div>
 </div>
 
 <div class="topbar" id="topbar">
@@ -2298,6 +2521,13 @@
           </div>
           <span class="module-tag ready">Ready</span>
         </div>
+        <div class="module-card disabled" id="moduleSkillCheck">
+          <div>
+            <div class="module-name">Skill Check Trainer</div>
+            <div class="module-desc">Practice hitting skill checks like in-game</div>
+          </div>
+          <span class="module-tag soon">Coming Soon</span>
+        </div>
       </div>
     </div>
 
@@ -2320,6 +2550,13 @@
             <div class="module-desc">Map overlays showing the 1-12 clock numbers to help you read your position</div>
           </div>
           <span class="module-tag ready">Ready</span>
+        </div>
+        <div class="module-card disabled" id="moduleStreakCounter">
+          <div>
+            <div class="module-name">Streak Counter</div>
+            <div class="module-desc">Track different win/loss streaks</div>
+          </div>
+          <span class="module-tag soon">Coming Soon</span>
         </div>
       </div>
     </div>
@@ -2532,21 +2769,24 @@
       </div>
       <span class="ayrun-cam-value" id="ovBrightnessValue">50%</span>
     </div>
-    <div class="bpm-row">
-      <label>Position X</label>
-      <div class="slider-marks-wrap">
-        <input type="range" min="0" max="100" step="1" value="50" id="ovPosX">
-      </div>
-      <span class="ayrun-cam-value" id="ovPosXValue">50%</span>
+    <div class="ov-swatch-divider"></div>
+    <div class="ov-switch-row">
+      <div class="ov-switch-label">Auto-score winner</div>
+      <div class="ov-switch" id="ovAutoScoreSwitch"></div>
     </div>
-    <div class="bpm-row">
-      <label>Position Y</label>
-      <div class="slider-marks-wrap">
-        <input type="range" min="0" max="100" step="1" value="4" id="ovPosY">
-      </div>
-      <span class="ayrun-cam-value" id="ovPosYValue">4%</span>
+    <div class="hk-hint">When a round ends, whoever's timer is higher automatically gets +1 point.</div>
+    <div class="ov-swatch-divider"></div>
+    <div class="ov-switch-row">
+      <div class="ov-switch-label">Winner highlight</div>
+      <div class="ov-switch" id="ovWinnerHighlightSwitch"></div>
     </div>
-    <div class="ov-hint">Turn the overlay on with the toggle above, then drag it into place with the sliders. In the desktop app it stays on top of the game; in the browser you can capture this page in OBS.</div>
+    <div class="hk-hint">Glows the higher timer once both timers are stopped, so the winner stands out at a glance.</div>
+    <div class="ov-swatch-divider"></div>
+    <div class="ov-switch-row">
+      <div class="ov-switch-label">Lock Overlay Position</div>
+      <div class="ov-switch" id="ovPosLockSwitch"></div>
+    </div>
+    <div class="ov-hint">Turn the overlay on with the toggle above. Unlock the position switch to drag it anywhere on screen &mdash; it snaps to the corners, edges, and center as you get close. Lock it back in once it's where you want it.</div>
   </div>
 </div>
 </div>
@@ -2595,16 +2835,6 @@
       <span class="ayrun-cam-value" id="mapSizeValue">100%</span>
     </div>
     <div class="bpm-row">
-      <label>Position X</label>
-      <div class="slider-marks-wrap"><input type="range" min="0" max="100" step="1" value="88" id="mapPosX"></div>
-      <span class="ayrun-cam-value" id="mapPosXValue">88%</span>
-    </div>
-    <div class="bpm-row">
-      <label>Position Y</label>
-      <div class="slider-marks-wrap"><input type="range" min="0" max="100" step="1" value="12" id="mapPosY"></div>
-      <span class="ayrun-cam-value" id="mapPosYValue">12%</span>
-    </div>
-    <div class="bpm-row">
       <label>Opacity</label>
       <div class="slider-marks-wrap"><input type="range" min="20" max="100" step="1" value="90" id="mapOpacity"></div>
       <span class="ayrun-cam-value" id="mapOpacityValue">90%</span>
@@ -2614,7 +2844,12 @@
       <div class="slider-marks-wrap"><input type="range" min="0" max="100" step="1" value="100" id="mapOvBrightness"></div>
       <span class="ayrun-cam-value" id="mapOvBrightnessValue">100%</span>
     </div>
-    <div class="ov-hint">In the desktop app the overlay stays on top of the game; in the browser you can capture this page in OBS.</div>
+    <div class="ov-swatch-divider"></div>
+    <div class="ov-switch-row">
+      <div class="ov-switch-label">Lock Overlay Position</div>
+      <div class="ov-switch" id="mapPosLockSwitch"></div>
+    </div>
+    <div class="ov-hint">Unlock the position switch to drag the map overlay anywhere on screen &mdash; it snaps to the corners, edges, and center as you get close. Lock it back in once it's where you want it.</div>
   </div>
 </div>
 </div>
@@ -4048,15 +4283,15 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
     '#4f3117','#91633b','#c4966e'
   ];
   var OV_TARGETS = [
-    { id:'p1Text',    label:'Player 1 name',  def:'#f2e6de' },
-    { id:'p1Bg',      label:'Player 1 bg',    def:'transparent' },
+    { id:'p1Text',    label:'Player 1 name',  def:'#ffffff' },
+    { id:'p1Bg',      label:'Player 1 bg',    def:'metallic:#000000' },
     { id:'scoreText', label:'Score text',     def:'#ffffff' },
-    { id:'scoreBg',   label:'Score bg',       def:'#1d4f91' },
-    { id:'p2Text',    label:'Player 2 name',  def:'#f2e6de' },
-    { id:'p2Bg',      label:'Player 2 bg',    def:'transparent' },
-    { id:'t1',        label:'Timer 1',        def:'#f2e6de' },
-    { id:'t2',        label:'Timer 2',        def:'#f2e6de' },
-    { id:'outline',   label:'Outline',        def:'#ffffff' },
+    { id:'scoreBg',   label:'Score bg',       def:'metallic:#000000' },
+    { id:'p2Text',    label:'Player 2 name',  def:'#ffffff' },
+    { id:'p2Bg',      label:'Player 2 bg',    def:'metallic:#000000' },
+    { id:'t1',        label:'Timer 1',        def:'#ffffff' },
+    { id:'t2',        label:'Timer 2',        def:'#ffffff' },
+    { id:'outline',   label:'Outline',        def:'transparent' },
     { id:'win',       label:'Winner highlight', def:'#e03a2f' }
   ];
   var ovColors = {};
@@ -4091,6 +4326,86 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
   var ovScoreP1Num=document.getElementById('ovScoreP1Num');
   var ovScoreP2Num=document.getElementById('ovScoreP2Num');
   var ovScoreDash=ovBarScore.querySelector('.ov-score-dash-inline');
+  // Blocks a digit keystroke at keydown, before it's processed at all --
+  // confirmed both a reactive 'input' cleanup AND 'beforeinput'
+  // preventDefault() unreliable against real fast typing/some engines.
+  // keydown blocking a specific keypress outright is the oldest, most
+  // universally supported way to prevent a character from being typed.
+  //
+  // Attached to ovBarScore itself (the OUTER div), not the individual
+  // number spans -- confirmed via document.activeElement that clicking
+  // anywhere inside a contentEditable region focuses the contentEditable
+  // ROOT, not whichever inner span visually sits under the cursor (spans
+  // aren't independently focusable inside one editable region, they just
+  // share the root's single focus/caret). Listeners on the inner spans
+  // themselves were therefore never actually firing at all -- this had
+  // to move up to the level that genuinely receives the keydown, then
+  // figure out from the current selection which of the two number spans
+  // the caret is actually sitting in before applying the 3-digit limit
+  // to THAT one specifically.
+  ovBarScore.addEventListener('keydown', function(e){
+    if(!/^[0-9]$/.test(e.key)) return;
+    var sel = window.getSelection();
+    if(!sel || sel.rangeCount === 0) return;
+    var node = sel.anchorNode;
+    // anchorNode is often a text node; walk up to the element that
+    // actually owns the id, whichever of the two number spans that is.
+    var owner = (node && node.nodeType === 3) ? node.parentElement : node;
+    while(owner && owner !== ovBarScore && owner.id !== 'ovScoreP1Num' && owner.id !== 'ovScoreP2Num'){
+      owner = owner.parentElement;
+    }
+    if(!owner || (owner.id !== 'ovScoreP1Num' && owner.id !== 'ovScoreP2Num')) return; // caret isn't in either number (e.g. sitting on the dash)
+    var current = (owner.textContent || '').replace(/[^0-9]/g, '');
+    var hasSelection = !sel.getRangeAt(0).collapsed && owner.contains(sel.anchorNode);
+    if(current.length >= 3 && !hasSelection){
+      e.preventDefault();
+    }
+  });
+  // Safety net for anything keydown-blocking doesn't cover (paste,
+  // drag-and-drop text, etc.) -- strips non-digits and truncates each
+  // number span to 3 after the fact for those specific cases. This one
+  // CAN stay per-span (rather than needing the same owner-lookup as
+  // above) since 'input' fires with the actual span as e.target even
+  // though keydown didn't.
+  function attachScoreDigitLimit(el){
+    el.addEventListener('input', function(){
+      var digitsOnly = (el.textContent || '').replace(/[^0-9]/g, '').slice(0, 3);
+      if(el.textContent !== digitsOnly){
+        el.textContent = digitsOnly;
+        var range = document.createRange();
+        range.selectNodeContents(el);
+        range.collapse(false);
+        var sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+    });
+  }
+  attachScoreDigitLimit(ovScoreP1Num);
+  attachScoreDigitLimit(ovScoreP2Num);
+  // Same truncate-as-you-type idea as the score digit limit above, for
+  // names: caps direct overlay editing at 11 characters, matching the
+  // wider name boxes sized for that. Attached to the OUTER div (that's
+  // what's actually contentEditable, not the inner name span -- see
+  // toggleOverlayEdit), checking textContent as a whole so it doesn't
+  // matter whether typing has temporarily disturbed the inner span's
+  // structure.
+  function attachNameCharLimit(el){
+    el.addEventListener('input', function(){
+      var text = el.textContent || '';
+      if(text.length > 11){
+        el.textContent = text.slice(0, 11);
+        var range = document.createRange();
+        range.selectNodeContents(el);
+        range.collapse(false);
+        var sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+    });
+  }
+  attachNameCharLimit(ovBarP1);
+  attachNameCharLimit(ovBarP2);
   var ovTimerP1El=document.getElementById('ovTimerP1');
   var ovTimerP2El=document.getElementById('ovTimerP2');
   var ovTimerDisplay=document.getElementById('ovTimerDisplay');
@@ -4104,10 +4419,30 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
   var ovOpacityValue=document.getElementById('ovOpacityValue');
   var ovBrightness=document.getElementById('ovBrightness');
   var ovBrightnessValue=document.getElementById('ovBrightnessValue');
-  var ovPosX=document.getElementById('ovPosX');
-  var ovPosXValue=document.getElementById('ovPosXValue');
-  var ovPosY=document.getElementById('ovPosY');
-  var ovPosYValue=document.getElementById('ovPosYValue');
+  // Position is no longer slider-driven -- these two plain numbers (not
+  // input elements) hold the current percentage position, updated live
+  // by dragging (see the positioning-mode code further down) instead.
+  // Same localStorage keys as the old sliders used (dbd_ovPosX/Y), so an
+  // existing saved position from before this change still loads
+  // correctly rather than resetting everyone back to the default.
+  var ovPosXPercent = 50;
+  var ovPosYPercent = 0.74;
+  var ovAutoScoreSwitch = document.getElementById('ovAutoScoreSwitch');
+  var ovWinnerHighlightSwitch = document.getElementById('ovWinnerHighlightSwitch');
+  var ovPosLockSwitch = document.getElementById('ovPosLockSwitch');
+  var ovAutoScoreEnabled = false;
+  // Defaults ON (unlike auto-score, which defaults off) -- this is an
+  // existing feature that was already always-on before this switch
+  // existed, so starting it enabled means nobody who was already relying
+  // on it loses it just because this toggle got added.
+  var ovWinnerHighlightEnabled = false;
+  // Starts LOCKED by default -- an unlocked/draggable overlay the very
+  // first time someone opens the app, before they've even turned the
+  // overlay on, would be an odd first impression (a dashed frame and
+  // move-cursor on something not yet visible in-game). Restored from
+  // localStorage below like everything else, so this only matters for
+  // brand new installs.
+  var ovPosLocked = true;
 
   // Shared gradient string for the rainbow swatch, reused everywhere it's
   // applied (text, backgrounds, and the swatch/target-dot previews) so
@@ -4124,6 +4459,157 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
     var b = parseInt(h.substring(4,6),16);
     return 'rgba('+r+','+g+','+b+','+a+')';
   }
+  function hexLighten(hex, amt){
+    var h = hex.replace('#','');
+    if(h.length===3){ h = h[0]+h[0]+h[1]+h[1]+h[2]+h[2]; }
+    var r = parseInt(h.substring(0,2),16), g = parseInt(h.substring(2,4),16), b = parseInt(h.substring(4,6),16);
+    r = Math.round(r + (255-r)*amt); g = Math.round(g + (255-g)*amt); b = Math.round(b + (255-b)*amt);
+    return 'rgb('+r+','+g+','+b+')';
+  }
+  function hexDarken(hex, amt){
+    var h = hex.replace('#','');
+    if(h.length===3){ h = h[0]+h[0]+h[1]+h[1]+h[2]+h[2]; }
+    var r = parseInt(h.substring(0,2),16), g = parseInt(h.substring(2,4),16), b = parseInt(h.substring(4,6),16);
+    r = Math.round(r*(1-amt)); g = Math.round(g*(1-amt)); b = Math.round(b*(1-amt));
+    return 'rgb('+r+','+g+','+b+')';
+  }
+  // A brushed-metal/chrome look for any base hue: a handful of light and
+  // dark bands (built FROM that same base color, not a fixed silver/gold
+  // gradient painted on top of it) at a diagonal angle, the classic CSS
+  // trick for a metallic sheen. Every one of the existing 45 swatch
+  // colors gets its metallic counterpart generated from this single
+  // formula -- not 45 hand-picked gradients -- so they all read as the
+  // same finish applied consistently across the whole palette, and adding
+  // a color to OV_COLORS in the future gets a matching metallic version
+  // for free.
+  function metallicGradient(hex){
+    // Lightened the "dark" band significantly (0.55 -> 0.28 darkening)
+    // and gave the base hex itself more stops (0%, 42%, 72%, 100% -- 4
+    // of 7 total, up from roughly 2 of 7 before) with only ONE moderate
+    // dip to the darker tone instead of three separate ones -- on small
+    // text specifically, background-clip:text is effectively averaging
+    // whatever slice of the gradient falls under each thin glyph, so a
+    // gradient that spent nearly half its length on a heavily-darkened
+    // band (confirmed directly: the base color on a name vs. the SAME
+    // color metallic-ized on a timer number, at equal font-appropriate
+    // scale, wasn't a bug in contrast -- it was genuinely averaging
+    // dimmer) read as visibly duller overall than the flat color right
+    // next to it, even though both were technically "the same color"
+    // going into the gradient. Still has real shine/shimmer variation
+    // (the bright highlight stops), just doesn't spend as much of the
+    // gradient sitting in the darkened range.
+    //
+    // Pure white specifically gets an even gentler dark band (0.28 -> 0.08
+    // darkening) -- any noticeable dark band reads as a visible GREY cast
+    // over the whole swatch precisely because there's no hue to distract
+    // the eye from it (a colored metallic's dark band still reads as
+    // "the same color, shaded", while white's dark band just reads as
+    // flatly grey). Silver/chrome effects conventionally lean on grey
+    // anyway, but confirmed directly this was reading as "just grey", not
+    // "white with shine", so keep the darkening subtle here specifically.
+    var isNearWhite = hex.toLowerCase() === '#ffffff';
+    // Gold specifically (roughly the amber/yellow-orange hue band real
+    // gold sits in) gets a touch more depth in its dark stop -- on
+    // request, only for that hue range, everything else stays exactly
+    // as it was. A plain vivid amber/yellow reads as more "traffic
+    // sign" than "gold" without a bit more richness in its shadow side;
+    // real gold has warmth and depth even in its darker areas, not just
+    // a flat darkened copy of the bright version.
+    var hueDeg = hexToHsl(hex)[0];
+    var isGoldHue = hueDeg >= 35 && hueDeg <= 55;
+    var dark = hexDarken(hex, isNearWhite ? 0.08 : (isGoldHue ? 0.4 : 0.28));
+    var brightest = hexLighten(hex, 0.85);
+    var light = hexLighten(hex, 0.5);
+    // Two highlight bands (a bigger, brighter one on the left, a smaller,
+    // dimmer one on the right) instead of one centered peak -- on
+    // request, restoring the two-highlight look an earlier version of
+    // this gradient had: a single centered light reads as flat/less
+    // convincing as a real brushed-metal reflection compared to two
+    // asymmetric ones. Still keeps every gap at 20+ percentage points
+    // (the fix for the hard-edge-on-the-curve issue found just before
+    // this) -- both highlights are wide, gradual sweeps, not narrow
+    // spikes, so this doesn't reintroduce that problem.
+    return 'linear-gradient(135deg, ' + dark + ' 0%, ' + brightest + ' 25%, ' +
+      hex + ' 50%, ' + light + ' 75%, ' + dark + ' 100%)';
+  }
+  // Values in ovColors/localStorage for a metallic pick are stored as
+  // 'metallic:#rrggbb' -- a single, parseable string, same spirit as the
+  // 'rainbow' keyword already used, so no separate storage shape or
+  // migration is needed for existing saves.
+  function isMetallic(val){ return typeof val === 'string' && val.indexOf('metallic:') === 0; }
+  function metallicBaseHex(val){ return val.slice('metallic:'.length); }
+
+  function hexToHsl(hex){
+    var h = hex.replace('#','');
+    if(h.length===3){ h = h[0]+h[0]+h[1]+h[1]+h[2]+h[2]; }
+    var r = parseInt(h.substring(0,2),16)/255, g = parseInt(h.substring(2,4),16)/255, b = parseInt(h.substring(4,6),16)/255;
+    var max = Math.max(r,g,b), min = Math.min(r,g,b);
+    var hh, s, l = (max+min)/2;
+    if(max===min){ hh=0; s=0; }
+    else {
+      var d = max-min;
+      s = l>0.5 ? d/(2-max-min) : d/(max+min);
+      if(max===r) hh = (g-b)/d + (g<b?6:0);
+      else if(max===g) hh = (b-r)/d + 2;
+      else hh = (r-g)/d + 4;
+      hh *= 60;
+    }
+    return [hh, s, l];
+  }
+  function hslToHex(h, s, l){
+    function f(n){
+      var k = (n + h/30) % 12;
+      var a = s * Math.min(l, 1-l);
+      var c = l - a * Math.max(-1, Math.min(k-3, 9-k, 1));
+      return Math.round(255*c);
+    }
+    var r=f(0), g=f(8), b=f(4);
+    return '#' + [r,g,b].map(function(v){ return v.toString(16).padStart(2,'0'); }).join('');
+  }
+  // A true neon pop: push saturation to full and lightness to a vivid
+  // (but not blown-out-white) band, from the SAME 45 base hues -- not a
+  // simple lighten, which just drifts toward pastel instead of getting
+  // more vibrant. Values stored as 'neon:#rrggbb' -- same pattern as
+  // 'metallic:', and this stores the ALREADY-BOOSTED hex directly (unlike
+  // metallic, which stores the original base and builds a gradient from
+  // it on demand), since neon just needs one solid vivid color plus a
+  // glow, not a multi-stop gradient recomputed each time.
+  function neonizeHex(hex){
+    var hsl = hexToHsl(hex);
+    var h = hsl[0], s = hsl[1], l = hsl[2];
+    // Confirmed two real duplicate collisions with the ORIGINAL version
+    // of this function: near-black (#000000) and near-white (#ffffff)
+    // both have essentially zero saturation, which makes hue undefined/
+    // defaulted to 0 (red) internally -- forcing saturation to 100% then
+    // turned both of them into plain red, landing exactly on top of the
+    // family's own actual red swatches once clamped to the same narrow
+    // lightness band. Kept genuinely neutral (grey-white glow, no hue)
+    // instead for any color that didn't have much color to begin with.
+    if(s < 0.08){
+      // Upper end of this range widened to reach true white (was capped
+      // at 0.75, meaning even pure white input topped out as a visibly
+      // grey result) -- confirmed the OLD version's duplicate-collision
+      // concern (why this range existed as a narrow band in the first
+      // place) was about a DIFFERENT, since-fixed bug: this proportional
+      // remap already keeps black (l=0 -> 0.35) and white (l=1 -> new
+      // upper bound) well apart on their own, so there's no collision
+      // risk in extending white's own end of the range back up to where
+      // it actually reads as white.
+      var neutralL = 0.35 + l * (1.0 - 0.35);
+      return hslToHex(0, 0, neutralL);
+    }
+    // The OTHER cause of duplicates: clamping every hue's lightness into
+    // one fixed narrow band collapsed the palette's three shades per hue
+    // family (dark/mid/light red, dark/mid/light orange, etc.) down to
+    // the same result, since their only original difference WAS
+    // lightness. A proportional remap instead of a clamp keeps a darker
+    // starting shade landing darker within the neon range and a lighter
+    // one landing lighter, so all three stay visually distinct.
+    var targetL = 0.38 + l * (0.72 - 0.38);
+    return hslToHex(h, 1, targetL);
+  }
+  function isNeon(val){ return typeof val === 'string' && val.indexOf('neon:') === 0; }
+  function neonBaseHex(val){ return val.slice('neon:'.length); }
 
   // Applies a color OR the special 'rainbow' value to something that
   // takes a plain CSS color (a border, a glow/shadow tint, etc, none of
@@ -4133,7 +4619,15 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
   // render one.
   var RAINBOW_FALLBACK_COLOR = '#ff2ec4';
   function resolveGlowColor(val){
-    return val === 'rainbow' ? RAINBOW_FALLBACK_COLOR : val;
+    if(val === 'rainbow') return RAINBOW_FALLBACK_COLOR;
+    // The bright highlight from the same gradient (not the flat original
+    // base hue) -- a solid border/glow spot can't show the actual
+    // shine, but using its lightest stop instead of the plain base color
+    // at least reads as visibly shinier/brighter than a completely flat
+    // color would, closer to what metallic actually looks like elsewhere.
+    if(isMetallic(val)) return hexLighten(metallicBaseHex(val), 0.55);
+    if(isNeon(val)) return neonBaseHex(val);
+    return val;
   }
 
   // Rainbow TEXT needs the gradient TILED (small background-size, repeat
@@ -4164,12 +4658,38 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
       el.style.backgroundClip = 'text';
       el.style.webkitTextFillColor = 'transparent';
       el.style.color = 'transparent';
+      el.style.textShadow = '';
+    } else if(isMetallic(val)){
+      el.style.backgroundImage = metallicGradient(metallicBaseHex(val));
+      el.style.backgroundSize = '200% 200%';
+      el.style.backgroundRepeat = 'no-repeat';
+      el.style.webkitBackgroundClip = 'text';
+      el.style.backgroundClip = 'text';
+      el.style.webkitTextFillColor = 'transparent';
+      el.style.color = 'transparent';
+      el.style.textShadow = '';
+    } else if(isNeon(val)){
+      var neonHex = neonBaseHex(val);
+      el.style.backgroundImage = 'none';
+      el.style.webkitBackgroundClip = '';
+      el.style.backgroundClip = '';
+      el.style.webkitTextFillColor = '';
+      el.style.color = neonHex;
+      // A genuine multi-layer glow on top of the same crisp, non-blurred
+      // stroke every other mode uses now (see .ov-side-timer's own base
+      // rule for the fuller reasoning) -- set inline (not via a CSS
+      // class) so this works identically on ANY text target (names,
+      // score, side timers alike). Toned down a notch on request (was
+      // 8/16/30px) -- still a real, clearly-neon glow, just not quite as
+      // blown-out/intense.
+      el.style.textShadow = '0 0 3px rgba(0,0,0,0.6), 0 0 6px ' + neonHex + ', 0 0 11px ' + neonHex + ', 0 0 20px ' + neonHex;
     } else {
       el.style.backgroundImage = 'none';
       el.style.webkitBackgroundClip = '';
       el.style.backgroundClip = '';
       el.style.webkitTextFillColor = '';
       el.style.color = val;
+      el.style.textShadow = '';
     }
   }
 
@@ -4191,7 +4711,7 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
   // "shape" even with every segment set to no color; splitting them into
   // independent boxes meant each one taking bgVal literally (including
   // the CSS keyword 'transparent') lost that shared backdrop entirely.
-  var OV_DEFAULT_FILL = 'rgba(23,20,21,0.92)';
+  var OV_DEFAULT_FILL = 'rgba(23,20,21,0.55)';
 
   function applyTextAndBg(outerEl, innerEls, textVal, bgVal){
     if(bgVal === 'rainbow'){
@@ -4200,9 +4720,29 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
       outerEl.style.backgroundPosition = '0 0';
       outerEl.style.backgroundRepeat = 'no-repeat';
       outerEl.style.backgroundColor = '';
+      outerEl.style.boxShadow = '';
+    } else if(isMetallic(bgVal)){
+      outerEl.style.backgroundImage = metallicGradient(metallicBaseHex(bgVal));
+      outerEl.style.backgroundSize = '100% 100%';
+      outerEl.style.backgroundPosition = '0 0';
+      outerEl.style.backgroundRepeat = 'no-repeat';
+      outerEl.style.backgroundColor = '';
+      outerEl.style.boxShadow = '';
+    } else if(isNeon(bgVal)){
+      var neonBgHex = neonBaseHex(bgVal);
+      outerEl.style.backgroundImage = 'none';
+      outerEl.style.backgroundColor = neonBgHex;
+      // Adds an actual glow ring around the box on top of the same base
+      // shadow every box already has (see .ov-bar-name/.ov-bar-score's
+      // own CSS) -- set inline together since inline style fully
+      // replaces rather than layering onto the CSS one. Toned down a
+      // notch on request (was 18/36px) -- still a clear glow, less
+      // blown-out.
+      outerEl.style.boxShadow = '0 6px 28px rgba(0,0,0,0.6), 0 0 26px rgba(180,20,30,0.18), 0 0 13px ' + neonBgHex + ', 0 0 24px ' + neonBgHex;
     } else {
       outerEl.style.backgroundColor = (bgVal === 'transparent') ? OV_DEFAULT_FILL : bgVal;
       outerEl.style.backgroundImage = 'none';
+      outerEl.style.boxShadow = '';
     }
     (Array.isArray(innerEls) ? innerEls : [innerEls]).forEach(function(el){
       applyTextColor(el, textVal);
@@ -4262,11 +4802,19 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
     applyContinuousRainbowBg();
     applyTextColor(ovTimerP1El, ovColors.t1);
     applyTextColor(ovTimerP2El, ovColors.t2);
-    // Lighter shadow variant so the rainbow gradient itself doesn't get
-    // muddied by the timer's normal heavy near-black text-shadow (see the
-    // .ov-side-timer.rainbow-text rule).
+    // Lighter shadow variant so a gradient fill (rainbow, metallic)
+    // doesn't get muddied by the timer's normal heavy near-black
+    // text-shadow (see the .ov-side-timer.rainbow-text rule and its
+    // sibling) -- metallic was missing this entirely before, which is
+    // exactly why it read as dull/washed out compared to how it actually
+    // looks in the swatch picker itself. Neon handles its own glow
+    // directly in applyTextColor (inline style, not a class) since it
+    // needs to work identically on names/score too, not just this
+    // element specifically.
     ovTimerP1El.classList.toggle('rainbow-text', ovColors.t1==='rainbow');
     ovTimerP2El.classList.toggle('rainbow-text', ovColors.t2==='rainbow');
+    ovTimerP1El.classList.toggle('metallic-text', isMetallic(ovColors.t1));
+    ovTimerP2El.classList.toggle('metallic-text', isMetallic(ovColors.t2));
     ovTimerP1El.style.setProperty('--ov-self', resolveGlowColor(ovColors.t1));
     ovTimerP2El.style.setProperty('--ov-self', resolveGlowColor(ovColors.t2));
     var w = resolveGlowColor(ovColors.win);
@@ -4302,6 +4850,34 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
     // the colours over time is the genuine-rainbow alternative instead of
     // falling back to one fixed representative colour.
     if(ovBarCore) ovBarCore.classList.toggle('rainbow-outline', ol==='rainbow');
+    // Neon Outline gets an actual glow around each box, not just a solid
+    // border in that color -- a border alone (same as metallic gets,
+    // just the plain base hue, since a gradient/glow can't render ON a
+    // border directly) was reading as "nothing visibly changed" compared
+    // to how dramatic neon looks as a text/background choice. Appended
+    // onto whatever box-shadow applyTextAndBg already set for each box
+    // just above (not overwritten), so a background ALSO set to neon
+    // still keeps its own glow layered together with this one.
+    //
+    // Re-enabled on all three boxes (was Score-only for a while): the
+    // name boxes' own INNER corner (the near-square one facing Score)
+    // used to show this glow as a hard, broken-looking patch instead of
+    // a smooth wrap -- confirmed directly at the time. That turned out
+    // to trace back to a border-radius bug on those same boxes (27px on
+    // a 57px-tall box is LESS than the true half-height semicircle,
+    // leaving a real flat segment in the curve) that's since been fixed
+    // to the correct 28.5px. Re-tested the same glow against the
+    // corrected corner directly -- wraps cleanly now, so the Score-only
+    // restriction no longer has a reason to exist.
+    if(isNeon(ol)){
+      var outlineHex = neonBaseHex(ol);
+      [ovBarP1, ovBarScore, ovBarP2].forEach(function(el){
+        var existing = el.style.boxShadow || '';
+        // Toned down a notch on request, same as the other neon glows
+        // (was 16px).
+        el.style.boxShadow = (existing ? existing + ', ' : '') + '0 0 11px ' + outlineHex;
+      });
+    }
     ovTimerP1El.style.setProperty('--ov-self-glow', hexToRgba(resolveGlowColor(ovColors.t1), 0.7));
     ovTimerP2El.style.setProperty('--ov-self-glow', hexToRgba(resolveGlowColor(ovColors.t2), 0.7));
   }
@@ -4356,7 +4932,10 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
   function fitAllPillText(){
     fitPillText(ovBarP1);
     fitPillText(ovBarP2);
-    fitPillText(ovBarScore);
+    // NOT fitPillText(ovBarScore) here anymore -- its font size is fixed
+    // (see .ov-bar-score's own CSS comment) rather than auto-shrinking,
+    // now that the score itself is capped at 2 digits per side so it no
+    // longer needs to.
   }
 
   // Just the timer-number/warning/leading part of a render -- split out so
@@ -4384,7 +4963,7 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
     otherEl.classList.remove('warning');
 
     // when both timers are paused, spotlight whoever holds the longer time
-    var showLead = !matchRunning && bothStarted;
+    var showLead = !matchRunning && bothStarted && ovWinnerHighlightEnabled;
     var tie = showLead && t1Elapsed === t2Elapsed;
     var p1Leads = showLead && (tie || t1Elapsed > t2Elapsed);
     var p2Leads = showLead && (tie || t2Elapsed > t1Elapsed);
@@ -4422,8 +5001,11 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
   }
 
   window.changeScore = function(player, delta){
-    if(player===1){ p1Score = Math.max(0, p1Score+delta); }
-    else { p2Score = Math.max(0, p2Score+delta); }
+    // Capped at 99 (2 digits) -- the score box's font size is now fixed
+    // rather than auto-shrinking to fit, so a 3rd digit would just
+    // overflow the box instead of getting smaller to compensate.
+    if(player===1){ p1Score = Math.min(999, Math.max(0, p1Score+delta)); }
+    else { p2Score = Math.min(999, Math.max(0, p2Score+delta)); }
     if(window.playUIHover) window.playUIHover();
     ovRender();
   };
@@ -4539,7 +5121,12 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
       chip.className='ov-target'+(t.id===ovActiveTarget?' selected':'');
       var dot=document.createElement('span');
       dot.className='ov-target-dot';
-      dot.style.background = ovColors[t.id]==='transparent' ? 'transparent' : (ovColors[t.id]==='rainbow' ? RAINBOW_GRADIENT : ovColors[t.id]);
+      var dotVal = ovColors[t.id];
+      dot.style.background = dotVal==='transparent' ? 'transparent'
+        : dotVal==='rainbow' ? RAINBOW_GRADIENT
+        : isMetallic(dotVal) ? metallicGradient(metallicBaseHex(dotVal))
+        : isNeon(dotVal) ? neonBaseHex(dotVal)
+        : dotVal;
       chip.appendChild(dot);
       chip.appendChild(document.createTextNode(t.label));
       chip.addEventListener('click', function(){
@@ -4554,18 +5141,29 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
 
   function buildSwatches(){
     ovSwatches.innerHTML='';
-    var list = ['transparent', 'rainbow'].concat(OV_COLORS);
-    list.forEach(function(col){
+    // 'rainbow' removed from the palette on request -- the underlying
+    // rainbow rendering (gradient backgrounds, cycling outline/text
+    // colors) is left in place untouched, just no longer reachable from
+    // here, in case it's ever wanted back.
+    var list = ['transparent'].concat(OV_COLORS);
+    function makeSwatch(col, displayBg, title, selected, extraShadow, disabled){
       var sw=document.createElement('div');
-      sw.className='ov-swatch'+(col===ovColors[ovActiveTarget]?' selected':'');
-      if(col==='transparent'){
-        sw.classList.add('ov-swatch-none');
-        sw.title='No color';
-      } else if(col==='rainbow'){
-        sw.style.background=RAINBOW_GRADIENT;
-        sw.title='Rainbow';
-      } else {
-        sw.style.background=col;
+      sw.className='ov-swatch'+(selected?' selected':'')+(disabled?' ov-swatch-disabled':'');
+      if(col==='transparent') sw.classList.add('ov-swatch-none');
+      if(title) sw.title=title;
+      // Disabled swatches keep their real background visible underneath
+      // (so a metallic swatch still LOOKS metallic) but get the exact
+      // same diagonal red bar already used for "no color" layered ON TOP
+      // of it -- multiple comma-separated background layers, the bar
+      // gradient listed first so it paints over the color/gradient
+      // beneath rather than replacing it.
+      sw.style.background = disabled
+        ? 'linear-gradient(45deg, transparent 45%, rgba(217,86,79,0.9) 45%, rgba(217,86,79,0.9) 55%, transparent 55%), ' + displayBg
+        : displayBg;
+      if(extraShadow) sw.style.boxShadow = extraShadow;
+      if(disabled){
+        sw.title = 'Not available for Winner highlight (this target can only show a single flat color, never a gradient)';
+        return sw; // no click handler at all -- genuinely not selectable, not just visually dimmed
       }
       sw.addEventListener('click', function(){
         ovColors[ovActiveTarget]=col;
@@ -4575,7 +5173,111 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
         applyOvColors();
         if(window.playUIHover) window.playUIHover();
       });
-      ovSwatches.appendChild(sw);
+      return sw;
+    }
+    var current = ovColors[ovActiveTarget];
+    list.forEach(function(col){
+      var displayBg = col==='transparent' ? '' : col==='rainbow' ? RAINBOW_GRADIENT : col;
+      ovSwatches.appendChild(makeSwatch(col, displayBg, col==='rainbow' ? 'Rainbow' : (col==='transparent' ? 'No color' : null), col===current));
+    });
+    // A second row, directly below and visually separated -- same 45
+    // colors as the row above, each rendered as its own metallic/chrome
+    // variant instead of a flat fill (see metallicGradient). Picking one
+    // stores 'metallic:#rrggbb' (see isMetallic/metallicBaseHex), which
+    // applyTextColor/applyTextAndBg both already know how to turn back
+    // into the actual gradient wherever it's used -- the real overlay
+    // included, not just this picker.
+    //
+    // Both this row and the neon one below it start COLLAPSED (persisted
+    // per-section in localStorage) -- with all three rows always fully
+    // expanded, this panel ran to 45*3 swatches at once, which was the
+    // "page is too long" complaint. Collapsed by default keeps the panel
+    // short; anyone who wants metallic/neon just opens that one section.
+    function buildCollapsibleRow(sectionName, storageKey, buildRowFn){
+      var divider = document.createElement('div');
+      divider.className = 'ov-swatch-divider';
+      ovSwatches.appendChild(divider);
+      // Reuses the exact same label-left/switch-right row style already
+      // used for Auto-score/Lock Overlay Position elsewhere in this same
+      // panel, instead of the previous centered label+small-switch --
+      // width:100% forces it onto its own full-width line despite living
+      // inside ovSwatches' flex-wrap layout (otherwise it would try to
+      // sit alongside the 46px swatch squares like one itself).
+      var headerRow = document.createElement('div');
+      headerRow.className = 'ov-switch-row';
+      headerRow.style.width = '100%';
+      var label = document.createElement('div');
+      label.className = 'ov-switch-label';
+      label.textContent = sectionName;
+      var sw = document.createElement('div');
+      sw.className = 'ov-switch';
+      headerRow.appendChild(label);
+      headerRow.appendChild(sw);
+      ovSwatches.appendChild(headerRow);
+      var row = buildRowFn();
+      row.className += ' ov-swatch-collapsible';
+      ovSwatches.appendChild(row);
+      var expanded = localStorage.getItem(storageKey) === '1';
+      sw.classList.toggle('on', expanded);
+      row.classList.toggle('open', expanded);
+      sw.addEventListener('click', function(){
+        expanded = !expanded;
+        localStorage.setItem(storageKey, expanded ? '1' : '0');
+        sw.classList.toggle('on', expanded);
+        row.classList.toggle('open', expanded);
+        if(window.playUIHover) window.playUIHover();
+      });
+    }
+    buildCollapsibleRow('Metallic', 'dbd_ovMetallicSectionOpen', function(){
+      var metallicRow = document.createElement('div');
+      metallicRow.className = 'ov-swatches';
+      // Winner highlight specifically only ever renders as one flat
+      // color (see resolveGlowColor's own callers -- it never gets a
+      // real gradient/text-clip treatment the way names/score/timers
+      // do), so a metallic pick there would silently just show its
+      // plain base hue -- misleading, since it looks like it should
+      // shine but never will. Left visible (not hidden) so the color
+      // itself is still there to look at, just crossed out and inert.
+      //
+      // Timer 1/Timer 2 disabled here too, on request -- unlike Winner
+      // highlight this isn't a technical limitation (the timers DO
+      // render a real metallic gradient on their own text, same as
+      // names/score), it's a deliberate style choice to keep those two
+      // slots off the metallic palette regardless.
+      var metallicDisabledHere = (ovActiveTarget === 'win' || ovActiveTarget === 't1' || ovActiveTarget === 't2');
+      OV_COLORS.forEach(function(hex){
+        var metaVal = 'metallic:' + hex;
+        metallicRow.appendChild(makeSwatch(metaVal, metallicGradient(hex), null, metaVal===current, null, metallicDisabledHere));
+      });
+      return metallicRow;
+    });
+
+    // A third row, same idea again: same 45 base hues, this time boosted
+    // to full saturation/vivid lightness (see neonizeHex) with a real
+    // glow around each swatch so the effect is obvious right here in the
+    // picker, not just once applied. Stores 'neon:#rrggbb' with the
+    // ALREADY-boosted hex baked in (see neonizeHex/isNeon/neonBaseHex).
+    buildCollapsibleRow('Neon', 'dbd_ovNeonSectionOpen', function(){
+      var neonRow = document.createElement('div');
+      neonRow.className = 'ov-swatches';
+      // Same reasoning as metallic's own winnerTargetDisabled above --
+      // Winner highlight can only ever show one flat color, never neon's
+      // actual glow effect, so it's disabled here too for the same
+      // "would be misleading, not just unsupported" reason.
+      var neonDisabledHere = (ovActiveTarget === 'win');
+      OV_COLORS.forEach(function(hex){
+        var neonHexVal = neonizeHex(hex);
+        var neonVal = 'neon:' + neonHexVal;
+        // Deliberately a much smaller glow than the real overlay gets
+        // (compare applyTextColor's neon branch) -- these swatches sit
+        // small and close together in a tight grid, where the same glow
+        // radius that looks great on one large, well-spaced piece of
+        // overlay text instead overlaps into neighboring swatches and
+        // reads as an overwhelming wash of light rather than 45 distinct
+        // colors.
+        neonRow.appendChild(makeSwatch(neonVal, neonHexVal, null, neonVal===current, '0 0 3px ' + neonHexVal, neonDisabledHere));
+      });
+      return neonRow;
     });
   }
 
@@ -4585,8 +5287,8 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
 
   function applyOvTransform(){
     var sc=parseInt(ovScale.value,10)/100;
-    ovBar.style.left=ovPosX.value+'%';
-    ovBar.style.top=ovPosY.value+'%';
+    ovBar.style.left=ovPosXPercent+'%';
+    ovBar.style.top=ovPosYPercent+'%';
     ovBar.style.transform='translateX(-50%) scale('+sc+')';
   }
   function applyOvOpacity(){
@@ -4610,15 +5312,216 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
     applyOvBrightness();
     localStorage.setItem('dbd_ovBrightness', ovBrightness.value);
   });
-  ovPosX.addEventListener('input', function(){
-    ovPosXValue.textContent=ovPosX.value+'%';
+
+  function setOvPosPercent(x, y, save){
+    ovPosXPercent = Math.max(0, Math.min(100, x));
+    ovPosYPercent = Math.max(0, Math.min(100, y));
     applyOvTransform();
-    localStorage.setItem('dbd_ovPosX', ovPosX.value);
+    if(save){
+      localStorage.setItem('dbd_ovPosX', ovPosXPercent);
+      localStorage.setItem('dbd_ovPosY', ovPosYPercent);
+      syncPositionAfterDrag();
+    }
+  }
+
+  // Dragging can happen in either window (the main window's own preview,
+  // OR -- far more commonly, since #ovBar is hidden in the main window
+  // by design -- the actual overlay window shown over the game). Each
+  // needs a different way to make the OTHER window aware a drag just
+  // finished: the overlay window has no pushOverlaySync of its own (that
+  // function only exists in the main window's branch further down), so
+  // it relays through the same dedicated IPC channel already used for
+  // live name/score edits made directly on the overlay. The main window,
+  // conversely, already has pushOverlaySync for exactly this purpose.
+  function syncPositionAfterDrag(){
+    if(window.OVERLAY_VIEW && window.electronAPI && window.electronAPI.sendOverlayPositionUpdate){
+      // ovPosLocked included here too (always true by the time this
+      // fires -- see the auto-relock in ovPositionMouseup) so the main
+      // window's own toggle switch UI reflects "locked" again as well,
+      // instead of staying stuck showing "unlocked" after the overlay
+      // window has already relocked itself.
+      window.electronAPI.sendOverlayPositionUpdate({ overlay: 'timer', ovPosX: ovPosXPercent, ovPosY: ovPosYPercent, ovPosLocked: ovPosLocked });
+    } else if(typeof pushOverlaySync === 'function'){
+      pushOverlaySync();
+    }
+  }
+
+  // The magnet works on the bar's ACTUAL rendered edges/corners matching
+  // the screen's, not just its center-point hitting a fixed percentage --
+  // the earlier version compared ovPosXPercent/ovPosYPercent (which track
+  // the bar's anchor point, off-center from its own edges by half its
+  // own width/height) directly against 0/50/100, which is only correct
+  // for a zero-size bar. For a real, few-hundred-pixels-wide bar, "center
+  // at X=100%" pushes half of it off-screen -- not the corner-alignment
+  // the snap was supposed to give, which is exactly what showed up as
+  // "snaps to the wrong/last position".
+  //
+  // ovBar is positioned via left:X% with transform:translateX(-50%) (so
+  // X% is the bar's own HORIZONTAL CENTER point) but top:Y% with NO
+  // translateY (so Y% is the bar's TOP EDGE directly, not its center) --
+  // an intentional asymmetry (a HUD bar makes more sense anchored to its
+  // top edge than vertically centered), but it means the two axes need
+  // different math to find what percentage actually puts a given edge of
+  // the bar flush with a given edge of the screen. Both are computed
+  // fresh from the bar's CURRENT rendered size every time (getBarSizePx),
+  // so this stays correct at any scale% setting and at any actual
+  // display/window resolution -- there's no hardcoded pixel assumption
+  // anywhere in here for a "stretched" resolution to break.
+  function getBarSizePx(){
+    var r = ovBar.getBoundingClientRect();
+    return { w: r.width, h: r.height };
+  }
+  // A small pixel margin (not flush with 0/window edge exactly) --
+  // confirmed via screenshot that an exactly-flush edge snap was getting
+  // slightly clipped in practice (a few pixels of the leftmost/rightmost
+  // content cut off), regardless of the math being correct on paper. A
+  // small inset avoids that regardless of the exact underlying cause
+  // (window chrome, anti-aliasing, monitor overscan) at the cost of a
+  // gap too small to notice.
+  var OV_EDGE_MARGIN_PX = 8;
+  function computeSnapTargetsX(){
+    var size = getBarSizePx();
+    var winW = window.innerWidth;
+    var halfBarPct = (size.w / 2) / winW * 100;
+    var marginPct = OV_EDGE_MARGIN_PX / winW * 100;
+    return {
+      left:   halfBarPct + marginPct,           // bar's LEFT edge just inside the screen's left edge
+      center: 50,                               // bar's own center on the screen's vertical center-LINE
+      right:  100 - halfBarPct - marginPct      // bar's RIGHT edge just inside the screen's right edge
+    };
+  }
+  function computeSnapTargetsY(){
+    var size = getBarSizePx();
+    var winH = window.innerHeight;
+    var barPctH = size.h / winH * 100;
+    var marginPct = OV_EDGE_MARGIN_PX / winH * 100;
+    return {
+      top:    marginPct,                              // bar's TOP edge just inside the screen's top edge
+      center: 50 - (barPctH / 2),                      // bar's own center on the screen's horizontal center-LINE
+      bottom: 100 - barPctH - marginPct                // bar's BOTTOM edge just inside the screen's bottom edge
+    };
+  }
+  // A light pull specifically near each axis's own center-line and near
+  // the screen's 4 corners (where a corner match is BOTH axes snapping
+  // together at once) -- everywhere else, dragging is fully free-hand,
+  // exactly as asked for: assistance right at the meaningful reference
+  // points, no pull anywhere in between.
+  var OV_SNAP_THRESHOLD = 0.8; // percentage points -- how close counts as "close enough to snap"
+  function nearestSnap(pct, targets){
+    var best = null, bestDist = OV_SNAP_THRESHOLD;
+    Object.keys(targets).forEach(function(key){
+      var d = Math.abs(pct - targets[key]);
+      if(d <= bestDist){ bestDist = d; best = targets[key]; }
+    });
+    return best; // null if nothing within range -- caller keeps the raw value
+  }
+
+  var ovDragState = null;
+  function ovPositionMousedown(e){
+    if(ovPosLocked) return;
+    if(ovEditing) return; // don't fight with name/score editing's own click handling
+    e.preventDefault();
+    var winW = window.innerWidth, winH = window.innerHeight;
+    ovDragState = {
+      startClientX: e.clientX, startClientY: e.clientY,
+      startPctX: ovPosXPercent, startPctY: ovPosYPercent,
+      winW: winW, winH: winH
+    };
+    document.addEventListener('mousemove', ovPositionMousemove);
+    document.addEventListener('mouseup', ovPositionMouseup);
+  }
+  function ovPositionMousemove(e){
+    if(!ovDragState) return;
+    var dxPct = (e.clientX - ovDragState.startClientX) / ovDragState.winW * 100;
+    var dyPct = (e.clientY - ovDragState.startClientY) / ovDragState.winH * 100;
+    var rawX = ovDragState.startPctX + dxPct;
+    var rawY = ovDragState.startPctY + dyPct;
+    var snapX = nearestSnap(rawX, computeSnapTargetsX());
+    var snapY = nearestSnap(rawY, computeSnapTargetsY());
+    var isSnapping = (snapX !== null) || (snapY !== null);
+    setOvPosPercent(snapX !== null ? snapX : rawX, snapY !== null ? snapY : rawY, false);
+    ovBar.classList.toggle('snapping', isSnapping);
+  }
+  // Shared by both the auto-relock-after-drag below and the Escape-key
+  // escape hatch further down.
+  function relockOverlayPosition(){
+    ovPosLocked = true;
+    localStorage.setItem('dbd_ovPosLocked', '1');
+    ovBar.classList.remove('positioning');
+    if(ovPosLockSwitch) ovPosLockSwitch.classList.add('on');
+    if(window.electronAPI && window.electronAPI.setOverlayClickThrough){
+      window.electronAPI.setOverlayClickThrough('timer', true);
+    }
+    syncPositionAfterDrag();
+  }
+  // Escape, while unlocked, relocks immediately -- without this, someone
+  // who unlocks and then changes their mind (never actually clicking or
+  // dragging the bar at all) has no way back: the overlay window stays
+  // non-click-through and focused, swallowing every click on screen
+  // including ones meant for the main app's own lock switch, and
+  // ovPositionMouseup (the other way this same relock happens) never
+  // fires without a real drag. Keyboard input still reaches the overlay
+  // window while it holds focus even though mouse clicks are being
+  // captured wholesale, so this is the one escape hatch that survives
+  // that state regardless of whether the bar itself was ever touched.
+  document.addEventListener('keydown', function(e){
+    if(e.key === 'Escape' && !ovPosLocked){
+      relockOverlayPosition();
+    }
   });
-  ovPosY.addEventListener('input', function(){
-    ovPosYValue.textContent=ovPosY.value+'%';
-    applyOvTransform();
-    localStorage.setItem('dbd_ovPosY', ovPosY.value);
+
+  function ovPositionMouseup(){
+    if(!ovDragState) return;
+    ovDragState = null;
+    document.removeEventListener('mousemove', ovPositionMousemove);
+    document.removeEventListener('mouseup', ovPositionMouseup);
+    ovBar.classList.remove('snapping');
+    localStorage.setItem('dbd_ovPosX', ovPosXPercent);
+    localStorage.setItem('dbd_ovPosY', ovPosYPercent);
+    // Auto-relock the instant a drag ends -- releasing the mouse always
+    // means "I'm done positioning it", so there's no reason to leave it
+    // unlocked/interactive a moment longer than that. (See
+    // relockOverlayPosition's own comment, and the Escape handler above,
+    // for the OTHER way this same thing needs to happen -- when a drag
+    // never occurs at all.)
+    relockOverlayPosition();
+  }
+  ovBar.addEventListener('mousedown', ovPositionMousedown);
+
+  function applyOvPosLockUI(){
+    ovBar.classList.toggle('positioning', !ovPosLocked);
+    ovPosLockSwitch.classList.toggle('on', ovPosLocked);
+    // Reuses the exact same click-through toggle already built for
+    // editing names/score on the overlay: unlocked (positioning mode)
+    // needs real mouse events to reach the overlay window for dragging
+    // to work at all, same reason editing does.
+    if(window.electronAPI && window.electronAPI.setOverlayClickThrough){
+      window.electronAPI.setOverlayClickThrough('timer', ovPosLocked);
+    }
+  }
+  ovPosLockSwitch.addEventListener('click', function(){
+    ovPosLocked = !ovPosLocked;
+    localStorage.setItem('dbd_ovPosLocked', ovPosLocked ? '1' : '0');
+    applyOvPosLockUI();
+    if(window.playUIHover) window.playUIHover();
+  });
+
+  ovAutoScoreSwitch.addEventListener('click', function(){
+    ovAutoScoreEnabled = !ovAutoScoreEnabled;
+    localStorage.setItem('dbd_ovAutoScore', ovAutoScoreEnabled ? '1' : '0');
+    ovAutoScoreSwitch.classList.toggle('on', ovAutoScoreEnabled);
+    if(window.playUIHover) window.playUIHover();
+  });
+
+  ovWinnerHighlightSwitch.addEventListener('click', function(){
+    ovWinnerHighlightEnabled = !ovWinnerHighlightEnabled;
+    localStorage.setItem('dbd_ovWinnerHighlight', ovWinnerHighlightEnabled ? '1' : '0');
+    ovWinnerHighlightSwitch.classList.toggle('on', ovWinnerHighlightEnabled);
+    // Takes effect immediately even if the match is currently paused
+    // showing a lead (not just on the next timer tick) -- same reasoning
+    // as renderTimersOnly's own immediate-effect comments elsewhere.
+    if(typeof renderTimersOnly === 'function') renderTimersOnly();
+    if(window.playUIHover) window.playUIHover();
   });
 
   // ----- restore saved overlay placement/appearance -----
@@ -4628,13 +5531,34 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
       ovOpacity: localStorage.getItem('dbd_ovOpacity'),
       ovBrightness: localStorage.getItem('dbd_ovBrightness'),
       ovPosX: localStorage.getItem('dbd_ovPosX'),
-      ovPosY: localStorage.getItem('dbd_ovPosY')
+      ovPosY: localStorage.getItem('dbd_ovPosY'),
+      ovAutoScore: localStorage.getItem('dbd_ovAutoScore'),
+      ovWinnerHighlight: localStorage.getItem('dbd_ovWinnerHighlight'),
+      ovPosLocked: localStorage.getItem('dbd_ovPosLocked')
     };
     if(saved.ovScale!==null){ ovScale.value=saved.ovScale; ovScaleValue.textContent=saved.ovScale+'%'; }
     if(saved.ovOpacity!==null){ ovOpacity.value=saved.ovOpacity; ovOpacityValue.textContent=saved.ovOpacity+'%'; }
     if(saved.ovBrightness!==null){ ovBrightness.value=saved.ovBrightness; ovBrightnessValue.textContent=saved.ovBrightness+'%'; }
-    if(saved.ovPosX!==null){ ovPosX.value=saved.ovPosX; ovPosXValue.textContent=saved.ovPosX+'%'; }
-    if(saved.ovPosY!==null){ ovPosY.value=saved.ovPosY; ovPosYValue.textContent=saved.ovPosY+'%'; }
+    if(saved.ovPosX!==null) ovPosXPercent = parseFloat(saved.ovPosX);
+    if(saved.ovPosY!==null) ovPosYPercent = parseFloat(saved.ovPosY);
+    if(saved.ovAutoScore!==null){ ovAutoScoreEnabled = saved.ovAutoScore==='1'; ovAutoScoreSwitch.classList.toggle('on', ovAutoScoreEnabled); }
+    if(saved.ovWinnerHighlight!==null){ ovWinnerHighlightEnabled = saved.ovWinnerHighlight==='1'; }
+    ovWinnerHighlightSwitch.classList.toggle('on', ovWinnerHighlightEnabled);
+    if(saved.ovPosLocked!==null){ ovPosLocked = saved.ovPosLocked==='1'; }
+    // Deliberately NOT calling applyOvPosLockUI() here (which would also
+    // fire setOverlayClickThrough via IPC) -- this runs unconditionally
+    // on every single page load, in EVERY window (main window included,
+    // where the actual bar isn't even visible). The overlay window's own
+    // click-through state already starts in the correct safe default
+    // from its own creation in main.js, so nothing needs correcting at
+    // load time regardless of what's in localStorage; only reflecting
+    // the CSS locally (for the drag-frame's own visual state, in
+    // whichever window actually shows the bar) is needed here. The full
+    // version (IPC included) stays reserved for the toggle's own click
+    // handler above, which only ever fires from a real, deliberate user
+    // action -- not from every app launch.
+    ovBar.classList.toggle('positioning', !ovPosLocked);
+    ovPosLockSwitch.classList.toggle('on', ovPosLocked);
   })();
 
   p1NameEl.addEventListener('input', ovRender);
@@ -4676,8 +5600,8 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
     var n2 = ovBarP2.textContent.trim();
     p1NameEl.value = n1 || 'Player 1';
     p2NameEl.value = n2 || 'Player 2';
-    p1Score = Math.max(0, parseInt(ovScoreP1Num.textContent, 10) || 0);
-    p2Score = Math.max(0, parseInt(ovScoreP2Num.textContent, 10) || 0);
+    p1Score = Math.min(999, Math.max(0, parseInt(ovScoreP1Num.textContent, 10) || 0));
+    p2Score = Math.min(999, Math.max(0, parseInt(ovScoreP2Num.textContent, 10) || 0));
   }
 
   window.toggleOverlayEdit = function(force){
@@ -4753,6 +5677,8 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
     ovScoreP1Num = document.getElementById('ovScoreP1Num');
     ovScoreP2Num = document.getElementById('ovScoreP2Num');
     ovScoreDash = ovBarScore.querySelector('.ov-score-dash-inline');
+    attachScoreDigitLimit(ovScoreP1Num);
+    attachScoreDigitLimit(ovScoreP2Num);
     applyOvColors(); // repaired spans start unstyled -- reapply current colors immediately
   }
 
@@ -4952,16 +5878,22 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
   function gamepadHkBuild(){
     if(!gamepadHkPanel) return;
     gamepadHkPanel.innerHTML = '';
-    var toggleBtn=document.createElement('button');
-    toggleBtn.className='hk-altstart-toggle'+(gamepadHkEnabled ? ' on' : '');
-    toggleBtn.textContent = gamepadHkEnabled ? '\u2713 Controller hotkeys enabled' : '+ Enable controller (XInput) hotkeys';
-    toggleBtn.addEventListener('click', function(){
+    var toggleRow=document.createElement('div');
+    toggleRow.className='ov-switch-row';
+    var toggleLabel=document.createElement('div');
+    toggleLabel.className='ov-switch-label';
+    toggleLabel.textContent='Enable controller (XInput) hotkeys';
+    var toggleSwitch=document.createElement('div');
+    toggleSwitch.className='ov-switch'+(gamepadHkEnabled ? ' on' : '');
+    toggleSwitch.addEventListener('click', function(){
       gamepadHkEnabled = !gamepadHkEnabled;
       localStorage.setItem('dbd_gamepadHkEnabled', gamepadHkEnabled ? '1' : '0');
       if(window.playUIHover) window.playUIHover();
       gamepadHkBuild();
     });
-    gamepadHkPanel.appendChild(toggleBtn);
+    toggleRow.appendChild(toggleLabel);
+    toggleRow.appendChild(toggleSwitch);
+    gamepadHkPanel.appendChild(toggleRow);
     if(gamepadHkEnabled){
       var grid=document.createElement('div');
       grid.className='hk-grid';
@@ -5206,12 +6138,14 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
     // click-to-bind/clear/conflict-resolution behavior (including binding
     // M1 itself by clicking a box a second time while listening) is
     // identical everywhere, not a special case just for these two.
-    var toggleBtn=document.createElement('button');
-    toggleBtn.className='hk-altstart-toggle'+(startLeftEnabled ? ' on' : '');
-    toggleBtn.textContent = startLeftEnabled
-      ? '\u2713 Crouch/M1 key enabled'
-      : '+ Enable a dedicated Crouch/M1 key to start the timer';
-    toggleBtn.addEventListener('click', function(ev){
+    var toggleRow=document.createElement('div');
+    toggleRow.className='ov-switch-row';
+    var toggleLabel=document.createElement('div');
+    toggleLabel.className='ov-switch-label';
+    toggleLabel.textContent='Dedicated Crouch/M1 key to start the timer';
+    var toggleSwitch=document.createElement('div');
+    toggleSwitch.className='ov-switch'+(startLeftEnabled ? ' on' : '');
+    toggleSwitch.addEventListener('click', function(ev){
       ev.stopPropagation();
       startLeftEnabled = !startLeftEnabled;
       localStorage.setItem('dbd_startLeftEnabled', startLeftEnabled ? '1' : '0');
@@ -5236,7 +6170,9 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
       if(window.playUIHover) window.playUIHover();
       hkBuild();
     });
-    crouchStartPanel.appendChild(toggleBtn);
+    toggleRow.appendChild(toggleLabel);
+    toggleRow.appendChild(toggleSwitch);
+    crouchStartPanel.appendChild(toggleRow);
 
     if(startLeftEnabled){
       var row=document.createElement('div');
@@ -5569,10 +6505,14 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
   var mapOverlayToggle = document.getElementById('mapOverlayToggle');
   var mapSize = document.getElementById('mapSize');
   var mapSizeValue = document.getElementById('mapSizeValue');
-  var mapPosX = document.getElementById('mapPosX');
-  var mapPosXValue = document.getElementById('mapPosXValue');
-  var mapPosY = document.getElementById('mapPosY');
-  var mapPosYValue = document.getElementById('mapPosYValue');
+  // Same change as the timer's ovPosXPercent/ovPosYPercent -- plain
+  // numbers instead of slider elements, updated live by dragging instead.
+  // Same localStorage keys the old sliders used (dbd_mapPosX/Y), so an
+  // existing saved position still loads correctly.
+  var mapPosXPercent = 88;
+  var mapPosYPercent = 12;
+  var mapPosLockSwitch = document.getElementById('mapPosLockSwitch');
+  var mapPosLocked = true;
   var mapOpacity = document.getElementById('mapOpacity');
   var mapOpacityValue = document.getElementById('mapOpacityValue');
   var mapOvBrightness = document.getElementById('mapOvBrightness');
@@ -5761,8 +6701,8 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
   // ----- overlay placement -----
   function applyMapOverlay(){
     var sc = parseInt(mapSize.value,10)/100;
-    mapOvBar.style.left = mapPosX.value + '%';
-    mapOvBar.style.top = mapPosY.value + '%';
+    mapOvBar.style.left = mapPosXPercent + '%';
+    mapOvBar.style.top = mapPosYPercent + '%';
     mapOvBar.style.transform = 'translate(-50%, 0) scale(' + sc + ')';
     mapOvBar.style.opacity = (parseInt(mapOpacity.value,10)/100);
   }
@@ -5775,10 +6715,116 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
     mapOvBar.style.filter = 'brightness(' + b.toFixed(3) + ')';
   }
   mapSize.addEventListener('input', function(){ mapSizeValue.textContent=mapSize.value+'%'; applyMapOverlay(); localStorage.setItem('dbd_mapSize', mapSize.value); });
-  mapPosX.addEventListener('input', function(){ mapPosXValue.textContent=mapPosX.value+'%'; applyMapOverlay(); localStorage.setItem('dbd_mapPosX', mapPosX.value); });
-  mapPosY.addEventListener('input', function(){ mapPosYValue.textContent=mapPosY.value+'%'; applyMapOverlay(); localStorage.setItem('dbd_mapPosY', mapPosY.value); });
   mapOpacity.addEventListener('input', function(){ mapOpacityValue.textContent=mapOpacity.value+'%'; applyMapOverlay(); localStorage.setItem('dbd_mapOpacity', mapOpacity.value); });
   mapOvBrightness.addEventListener('input', function(){ mapOvBrightnessValue.textContent=mapOvBrightness.value+'%'; applyMapOvBrightness(); localStorage.setItem('dbd_mapOvBrightness', mapOvBrightness.value); });
+
+  // ---------------------------------------------------------------------
+  // Drag-to-position for the map overlay, unlocked via the unified
+  // "Lock Overlay Position" switch -- identical design to the timer's own
+  // (see that switch's handlers for the fuller reasoning comments):
+  // edge-aware magnetic snap sized to the overlay's OWN current rendered
+  // box (not a naive 0/50/100 on its center point), a small pixel margin
+  // on edge targets so a corner-snapped overlay doesn't get clipped, a
+  // light-touch snap radius, sync suppressed mid-drag against the 150ms
+  // safety-net tick, auto-relock the instant a drag ends, and Escape as
+  // an escape hatch when no drag ever happens at all.
+  function getMapBarSizePx(){
+    var r = mapOvBar.getBoundingClientRect();
+    return { w: r.width, h: r.height };
+  }
+  var MAP_SNAP_THRESHOLD = 0.8;
+  var MAP_EDGE_MARGIN_PX = 8;
+  function computeMapSnapTargetsX(){
+    var size = getMapBarSizePx();
+    var winW = window.innerWidth;
+    var halfPct = (size.w / 2) / winW * 100;
+    var marginPct = MAP_EDGE_MARGIN_PX / winW * 100;
+    return { left: halfPct + marginPct, center: 50, right: 100 - halfPct - marginPct };
+  }
+  function computeMapSnapTargetsY(){
+    var size = getMapBarSizePx();
+    var winH = window.innerHeight;
+    var barPctH = size.h / winH * 100;
+    var marginPct = MAP_EDGE_MARGIN_PX / winH * 100;
+    return { top: marginPct, center: 50 - (barPctH/2), bottom: 100 - barPctH - marginPct };
+  }
+  function nearestMapSnap(pct, targets){
+    var best = null, bestDist = MAP_SNAP_THRESHOLD;
+    Object.keys(targets).forEach(function(key){
+      var d = Math.abs(pct - targets[key]);
+      if(d <= bestDist){ bestDist = d; best = targets[key]; }
+    });
+    return best;
+  }
+  function setMapPosPercent(x, y){
+    mapPosXPercent = Math.max(0, Math.min(100, x));
+    mapPosYPercent = Math.max(0, Math.min(100, y));
+    applyMapOverlay();
+  }
+  function syncMapPositionAfterDrag(){
+    if(window.OVERLAY_VIEW && window.electronAPI && window.electronAPI.sendOverlayPositionUpdate){
+      window.electronAPI.sendOverlayPositionUpdate({ overlay: 'map', mapPosX: mapPosXPercent, mapPosY: mapPosYPercent, mapPosLocked: mapPosLocked });
+    } else if(typeof pushOverlaySync === 'function'){
+      pushOverlaySync();
+    }
+  }
+  function relockMapPosition(){
+    mapPosLocked = true;
+    localStorage.setItem('dbd_mapPosLocked', '1');
+    mapOvBar.classList.remove('positioning');
+    if(mapPosLockSwitch) mapPosLockSwitch.classList.add('on');
+    if(window.electronAPI && window.electronAPI.setOverlayClickThrough){
+      window.electronAPI.setOverlayClickThrough('map', true);
+    }
+    syncMapPositionAfterDrag();
+  }
+  document.addEventListener('keydown', function(e){
+    if(e.key === 'Escape' && !mapPosLocked){
+      relockMapPosition();
+    }
+  });
+  var mapDragState = null;
+  function mapPositionMousedown(e){
+    if(mapPosLocked) return;
+    e.preventDefault();
+    mapDragState = {
+      startClientX: e.clientX, startClientY: e.clientY,
+      startPctX: mapPosXPercent, startPctY: mapPosYPercent,
+      winW: window.innerWidth, winH: window.innerHeight
+    };
+    document.addEventListener('mousemove', mapPositionMousemove);
+    document.addEventListener('mouseup', mapPositionMouseup);
+  }
+  function mapPositionMousemove(e){
+    if(!mapDragState) return;
+    var dxPct = (e.clientX - mapDragState.startClientX) / mapDragState.winW * 100;
+    var dyPct = (e.clientY - mapDragState.startClientY) / mapDragState.winH * 100;
+    var rawX = mapDragState.startPctX + dxPct;
+    var rawY = mapDragState.startPctY + dyPct;
+    var snapX = nearestMapSnap(rawX, computeMapSnapTargetsX());
+    var snapY = nearestMapSnap(rawY, computeMapSnapTargetsY());
+    setMapPosPercent(snapX !== null ? snapX : rawX, snapY !== null ? snapY : rawY);
+  }
+  function mapPositionMouseup(){
+    if(!mapDragState) return;
+    mapDragState = null;
+    document.removeEventListener('mousemove', mapPositionMousemove);
+    document.removeEventListener('mouseup', mapPositionMouseup);
+    localStorage.setItem('dbd_mapPosX', mapPosXPercent);
+    localStorage.setItem('dbd_mapPosY', mapPosYPercent);
+    relockMapPosition();
+  }
+  mapOvBar.addEventListener('mousedown', mapPositionMousedown);
+  mapPosLockSwitch.addEventListener('click', function(){
+    mapPosLocked = !mapPosLocked;
+    localStorage.setItem('dbd_mapPosLocked', mapPosLocked ? '1' : '0');
+    mapOvBar.classList.toggle('positioning', !mapPosLocked);
+    mapPosLockSwitch.classList.toggle('on', mapPosLocked);
+    if(window.electronAPI && window.electronAPI.setOverlayClickThrough){
+      window.electronAPI.setOverlayClickThrough('map', mapPosLocked);
+    }
+    if(window.playUIHover) window.playUIHover();
+  });
 
   // ----- restore saved overlay placement/appearance -----
   (function(){
@@ -5787,13 +6833,21 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
       mapPosX: localStorage.getItem('dbd_mapPosX'),
       mapPosY: localStorage.getItem('dbd_mapPosY'),
       mapOpacity: localStorage.getItem('dbd_mapOpacity'),
-      mapOvBrightness: localStorage.getItem('dbd_mapOvBrightness')
+      mapOvBrightness: localStorage.getItem('dbd_mapOvBrightness'),
+      mapPosLocked: localStorage.getItem('dbd_mapPosLocked')
     };
     if(saved.mapSize!==null){ mapSize.value=saved.mapSize; mapSizeValue.textContent=saved.mapSize+'%'; }
-    if(saved.mapPosX!==null){ mapPosX.value=saved.mapPosX; mapPosXValue.textContent=saved.mapPosX+'%'; }
-    if(saved.mapPosY!==null){ mapPosY.value=saved.mapPosY; mapPosYValue.textContent=saved.mapPosY+'%'; }
+    if(saved.mapPosX!==null) mapPosXPercent = parseFloat(saved.mapPosX);
+    if(saved.mapPosY!==null) mapPosYPercent = parseFloat(saved.mapPosY);
     if(saved.mapOpacity!==null){ mapOpacity.value=saved.mapOpacity; mapOpacityValue.textContent=saved.mapOpacity+'%'; }
     if(saved.mapOvBrightness!==null){ mapOvBrightness.value=saved.mapOvBrightness; mapOvBrightnessValue.textContent=saved.mapOvBrightness+'%'; }
+    if(saved.mapPosLocked!==null){ mapPosLocked = saved.mapPosLocked==='1'; }
+    // Deliberately not calling the IPC-triggering part of relock here --
+    // same reasoning as the timer's own restore block: this runs on
+    // EVERY page load in EVERY window, and the overlay's click-through
+    // state already starts correct from its own creation in main.js.
+    mapOvBar.classList.toggle('positioning', !mapPosLocked);
+    if(mapPosLockSwitch) mapPosLockSwitch.classList.toggle('on', mapPosLocked);
   })();
 
   window.toggleMapOverlay = function(){
@@ -5930,16 +6984,22 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
   function gamepadMapHkBuild(){
     if(!gamepadMapHkPanel) return;
     gamepadMapHkPanel.innerHTML = '';
-    var toggleBtn=document.createElement('button');
-    toggleBtn.className='hk-altstart-toggle'+(gamepadMapHkEnabled ? ' on' : '');
-    toggleBtn.textContent = gamepadMapHkEnabled ? '\u2713 Controller hotkeys enabled' : '+ Enable controller (XInput) hotkeys';
-    toggleBtn.addEventListener('click', function(){
+    var toggleRow=document.createElement('div');
+    toggleRow.className='ov-switch-row';
+    var toggleLabel=document.createElement('div');
+    toggleLabel.className='ov-switch-label';
+    toggleLabel.textContent='Enable controller (XInput) hotkeys';
+    var toggleSwitch=document.createElement('div');
+    toggleSwitch.className='ov-switch'+(gamepadMapHkEnabled ? ' on' : '');
+    toggleSwitch.addEventListener('click', function(){
       gamepadMapHkEnabled = !gamepadMapHkEnabled;
       localStorage.setItem('dbd_gamepadMapHkEnabled', gamepadMapHkEnabled ? '1' : '0');
       if(window.playUIHover) window.playUIHover();
       gamepadMapHkBuild();
     });
-    gamepadMapHkPanel.appendChild(toggleBtn);
+    toggleRow.appendChild(toggleLabel);
+    toggleRow.appendChild(toggleSwitch);
+    gamepadMapHkPanel.appendChild(toggleRow);
     if(gamepadMapHkEnabled){
       var grid=document.createElement('div');
       grid.className='hk-grid';
@@ -6100,6 +7160,7 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
     // it drove are still used as-is in the plain-browser fallback further
     // up this file, this just doesn't call into it here.
     var lastAppliedMatchSeq = -1;
+    var wasMatchRunning = false;
     window.electronAPI.onMatchTick(function(payload){
       if(payload.seq !== undefined){
         if(payload.seq <= lastAppliedMatchSeq) return; // stale/out-of-order, discard
@@ -6108,6 +7169,28 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
       t1Elapsed = payload.t1Elapsed; t2Elapsed = payload.t2Elapsed;
       activeTimer = payload.activeTimer; matchRunning = payload.matchRunning;
       if(ovStartBtn) ovStartBtn.textContent = matchRunning ? 'Pause' : 'Start';
+      // Auto-score: fires once, exactly on the running->stopped edge (not
+      // on every tick while stopped), and only from the main window --
+      // both windows receive this same tick stream, so without the
+      // !window.OVERLAY_VIEW guard here, a running match ending would
+      // award the point twice (once per window independently reaching
+      // the same conclusion from the same data).
+      if(wasMatchRunning && !matchRunning && !window.OVERLAY_VIEW && ovAutoScoreEnabled){
+        var higher = t1Elapsed >= t2Elapsed ? 1 : 2;
+        // Both sides need SOME recorded time, not just the one that was
+        // just running -- confirmed the exact bug this guards against:
+        // starting only Player 1's timer and stopping it while Player 2
+        // hasn't had their turn yet (still legitimately at its untouched
+        // 0) was being scored as "Player 1 wins", since 0 looks the same
+        // whether it means "actually survived zero seconds" or "hasn't
+        // gone yet". Requiring both to be non-zero means a genuine 1v1
+        // round -- both sides actually ran -- is what triggers scoring,
+        // not just one side being tried in isolation.
+        if(t1Elapsed > 0 && t2Elapsed > 0 && t1Elapsed !== t2Elapsed){ // a dead tie awards nobody
+          window.changeScore(higher, 1);
+        }
+      }
+      wasMatchRunning = matchRunning;
       renderTimersOnly();
     });
     // Sync to whatever's already running the moment this window loads
@@ -6301,7 +7384,8 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
           ovColors: ovColors, ovVisible: ovVisible, timerStacked: timerStacked,
           ovEditing: ovEditing,
           ovScale: ovScale.value, ovOpacity: ovOpacity.value,
-          ovBrightness: ovBrightness.value, ovPosX: ovPosX.value, ovPosY: ovPosY.value
+          ovBrightness: ovBrightness.value, ovPosX: ovPosXPercent, ovPosY: ovPosYPercent,
+          ovPosLocked: ovPosLocked, ovWinnerHighlightEnabled: ovWinnerHighlightEnabled
         };
       }
       function buildMapSync(){
@@ -6310,7 +7394,8 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
           mapCurrent: mapCurrent, mapRotation: mapRotation,
           mapOvVisible: mapOvBar.classList.contains('show'),
           mapOverlayInteractive: mapOverlayInteractive,
-          mapSize: mapSize.value, mapPosX: mapPosX.value, mapPosY: mapPosY.value,
+          mapSize: mapSize.value, mapPosX: mapPosXPercent, mapPosY: mapPosYPercent,
+          mapPosLocked: mapPosLocked,
           mapOpacity: mapOpacity.value, mapOvBrightness: mapOvBrightness.value
         };
       }
@@ -6364,6 +7449,43 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
         p2Score = payload.p2Score;
         ovEditing = payload.ovEditing;
       });
+
+      // Same idea, for a drag that just finished on the real overlay
+      // window (timer OR map -- see syncPositionAfterDrag/
+      // syncMapPositionAfterDrag) -- keeps this window's own position
+      // state (and its localStorage, which the settings panel itself
+      // doesn't otherwise touch once it's no longer slider-driven) in
+      // sync with wherever the bar actually got dropped in-game.
+      if(window.electronAPI.onOverlayPositionUpdate){
+        window.electronAPI.onOverlayPositionUpdate(function(payload){
+          if(payload.overlay === 'map'){
+            mapPosXPercent = payload.mapPosX;
+            mapPosYPercent = payload.mapPosY;
+            localStorage.setItem('dbd_mapPosX', mapPosXPercent);
+            localStorage.setItem('dbd_mapPosY', mapPosYPercent);
+            if(typeof payload.mapPosLocked === 'boolean'){
+              mapPosLocked = payload.mapPosLocked;
+              localStorage.setItem('dbd_mapPosLocked', mapPosLocked ? '1' : '0');
+              if(mapPosLockSwitch) mapPosLockSwitch.classList.toggle('on', mapPosLocked);
+            }
+            return;
+          }
+          ovPosXPercent = payload.ovPosX;
+          ovPosYPercent = payload.ovPosY;
+          localStorage.setItem('dbd_ovPosX', ovPosXPercent);
+          localStorage.setItem('dbd_ovPosY', ovPosYPercent);
+          // The overlay window auto-relocks itself the instant a drag
+          // ends (see ovPositionMouseup) -- reflecting that same lock
+          // state here keeps this window's own switch UI showing
+          // "locked" too, instead of staying stuck on "unlocked" after
+          // the overlay has already relocked on its own.
+          if(typeof payload.ovPosLocked === 'boolean'){
+            ovPosLocked = payload.ovPosLocked;
+            localStorage.setItem('dbd_ovPosLocked', ovPosLocked ? '1' : '0');
+            ovPosLockSwitch.classList.toggle('on', ovPosLocked);
+          }
+        });
+      }
 
       // Screen capture + OCR + matching all happen in the main process
       // (see map-detect.js); this just forwards the app's own map list
@@ -6481,7 +7603,25 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
           timerStacked = payload.timerStacked;
           ovScale.value = payload.ovScale; ovOpacity.value = payload.ovOpacity;
           ovBrightness.value = payload.ovBrightness;
-          ovPosX.value = payload.ovPosX; ovPosY.value = payload.ovPosY;
+          // Skipped entirely while a drag is actively in progress here
+          // (ovDragState set) -- this whole handler fires from a
+          // "safety net" sync arriving every 150ms from the main window,
+          // which doesn't know a drag is happening until it ends and
+          // relays the result back. Applying its (necessarily stale, from
+          // before the drag started) position on every one of those ticks
+          // meant the bar kept getting yanked back to where it was
+          // originally, every 150ms, mid-drag -- which is exactly what
+          // showed up as "keeps wanting to return to the starting point".
+          if(!ovDragState){
+            ovPosXPercent = payload.ovPosX; ovPosYPercent = payload.ovPosY;
+          }
+          if(typeof payload.ovPosLocked === 'boolean'){
+            ovPosLocked = payload.ovPosLocked;
+            ovBar.classList.toggle('positioning', !ovPosLocked);
+          }
+          if(typeof payload.ovWinnerHighlightEnabled === 'boolean'){
+            ovWinnerHighlightEnabled = payload.ovWinnerHighlightEnabled;
+          }
           ovBar.classList.toggle('show', ovVisible);
           ovBar.classList.toggle('stacked', timerStacked);
           applyOvTransform(); applyOvOpacity(); applyOvBrightness();
@@ -6493,9 +7633,20 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
           if(payload.mapOverlayInteractive !== mapOverlayInteractive){
             window.toggleMapOverlayInteract(payload.mapOverlayInteractive);
           }
-          mapSize.value = payload.mapSize; mapPosX.value = payload.mapPosX;
-          mapPosY.value = payload.mapPosY; mapOpacity.value = payload.mapOpacity;
+          mapSize.value = payload.mapSize;
+          mapOpacity.value = payload.mapOpacity;
           mapOvBrightness.value = payload.mapOvBrightness;
+          // Skipped while a drag is actively in progress here -- same
+          // "150ms safety-net sync fighting a live drag" issue fixed for
+          // the timer overlay, and the map overlay shares that exact
+          // same periodic tick.
+          if(!mapDragState){
+            mapPosXPercent = payload.mapPosX; mapPosYPercent = payload.mapPosY;
+            if(typeof payload.mapPosLocked === 'boolean'){
+              mapPosLocked = payload.mapPosLocked;
+              mapOvBar.classList.toggle('positioning', !mapPosLocked);
+            }
+          }
           applyMapOverlay(); applyMapOvBrightness();
           renderCurrentMap();
         }
