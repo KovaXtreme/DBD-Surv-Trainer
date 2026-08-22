@@ -126,6 +126,33 @@ function shouldDispatchHotkey(actionId) {
   return true;
 }
 
+// Only ever used to gate the M1-equivalent trigger (whichever of its
+// three input paths -- mouse click, its own dedicated keyboard binding,
+// or its own dedicated controller binding -- actually fired), on
+// request: unlike every other hotkey here (which are all safe to leave
+// bound globally, since they're deliberate F-keys/controller buttons
+// nobody presses by accident), M1 specifically mirrors the game's own
+// most-used input (a left click, or whatever's remapped to stand in for
+// one), so without this it could start the timer from clicking or
+// pressing that same button anywhere on the whole PC, not just in Dead
+// by Daylight itself. Resolves to true (fires anyway) if active-win
+// itself is unavailable or throws -- gating a real feature behind a
+// diagnostic dependency failing silently would be a worse outcome than
+// occasionally firing outside the game.
+async function isDbdFocused() {
+  if (!activeWindowFn) return true;
+  try {
+    const win = await activeWindowFn();
+    if (!win) return false;
+    const title = (win.title || '').toLowerCase();
+    const ownerName = (win.owner && win.owner.name || '').toLowerCase();
+    return title.includes('dead by daylight') || ownerName.includes('deadbydaylight') || ownerName.includes('dead by daylight');
+  } catch (err) {
+    console.warn('[M1 DBD check] active-win threw, allowing the trigger through:', err && err.message);
+    return true;
+  }
+}
+
 function refreshSharedHookState() {
   if (!uIOhookInstance) return;
   const needed = specialBindings.size > 0 || capturingMouseButtons;
@@ -312,12 +339,18 @@ async function initGamepadFeature() {
         // print during the exact moment being tested).
         console.log('[gamepad] button pressed:', button);
         const actionId = gamepadBindings.get(button);
-        if (actionId && shouldDispatchHotkey(actionId)) {
+        if (!actionId) continue;
+        // Deliberately no Dead by Daylight focus check here, unlike the
+        // mouse-click and keyboard M1 paths -- explicitly excluded: the
+        // controller's own "M1 Equivalent" button should keep firing
+        // anywhere, same as every other controller binding, not just
+        // while the game itself is focused.
+        if (shouldDispatchHotkey(actionId)) {
           console.log('[gamepad] FIRED:', button, '->', actionId, 'at', new Date().toISOString());
           if (mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.webContents.send('hotkey-fired', actionId);
           }
-        } else if (actionId) {
+        } else {
           console.log('[gamepad]', button, '-> bound to', actionId, 'but wrong screen active (', activeScreen, ') -- skipped');
         }
       }
@@ -390,11 +423,15 @@ async function initM1Feature() {
 
       const actionId = specialBindings.get(buttonName);
       if (!actionId) return;
-      // Deliberately no "is Dead by Daylight focused" check here (unlike
-      // this app's very first version of M1 support) -- explicitly
-      // requested: a bound mouse button should fire the same way an F-key
-      // does, everywhere, regardless of what has focus. Screen-gating
-      // (shouldDispatchHotkey below) is the only remaining condition.
+      // M1 specifically (not M2/M4/M5, which still fire anywhere per an
+      // earlier explicit request) only dispatches while Dead by Daylight
+      // itself is the focused window -- re-added on request; see
+      // isDbdFocused's own comment for why this one button is treated
+      // differently from every other bindable mouse button/key here.
+      if (buttonName === 'M1' && !(await isDbdFocused())) {
+        console.log('[mouse] M1 ->', actionId, 'but Dead by Daylight is not the focused window -- skipped');
+        return;
+      }
       if (!shouldDispatchHotkey(actionId)) {
         console.log('[mouse]', buttonName, '-> bound to', actionId, 'but wrong screen active (', activeScreen, ') -- skipped');
         return;
@@ -437,6 +474,25 @@ async function initM1Feature() {
 // Window creation
 // ---------------------------------------------------------------------
 
+// F12 (or Ctrl+Shift+I, for keyboards without dedicated function keys --
+// common on smaller/laptop layouts) opens DevTools for whichever window
+// it's pressed in -- registered directly on each window's webContents
+// (not through the application menu, which is set to null below and
+// would normally be what wires up these standard shortcuts) so they keep
+// working regardless of that. Useful for troubleshooting a specific
+// visual bug report without needing to rebuild with the menu re-enabled
+// just for that.
+function attachDevToolsShortcut(win) {
+  win.webContents.on('before-input-event', (_event, input) => {
+    if (input.type !== 'keyDown') return;
+    const isF12 = input.key === 'F12';
+    const isCtrlShiftI = input.control && input.shift && input.key.toLowerCase() === 'i';
+    if (isF12 || isCtrlShiftI) {
+      win.webContents.toggleDevTools();
+    }
+  });
+}
+
 function createMainWindow() {
   mainWindow = new BrowserWindow({
     width: 1400,
@@ -465,6 +521,8 @@ function createMainWindow() {
       backgroundThrottling: false
     }
   });
+
+  attachDevToolsShortcut(mainWindow);
 
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
 
@@ -538,6 +596,8 @@ function createOverlayWindow(viewName) {
   // input while explicitly made interactive during name/score editing
   // (see 'set-overlay-click-through' below), which doesn't use forwarding.
   win.setIgnoreMouseEvents(true);
+
+  attachDevToolsShortcut(win);
 
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'), {
     search: 'view=' + viewName
@@ -645,7 +705,16 @@ function applyHotkeyBindings(bindings) {
       return;
     }
 
-    const ok = globalShortcut.register(accelerator, () => {
+    const ok = globalShortcut.register(accelerator, async () => {
+      // Same Dead by Daylight focus check as the mouse-click M1 path,
+      // for this action id's own dedicated keyboard binding (the "M1
+      // Equivalent" key in the Crouch/M1 section) -- see isDbdFocused's
+      // comment for the reasoning; this is the same trigger, just bound
+      // to a keyboard key instead of the literal mouse button.
+      if (id === 'm1' && !(await isDbdFocused())) {
+        console.log('[hotkeys]', accelerator, '-> bound to', id, 'but Dead by Daylight is not the focused window -- skipped');
+        return;
+      }
       if (!shouldDispatchHotkey(id)) {
         console.log('[hotkeys]', accelerator, '-> bound to', id, 'but wrong screen active (', activeScreen, ') -- skipped');
         return;
@@ -760,6 +829,19 @@ ipcMain.on('set-overlay-click-through', (_event, overlayName, ignore) => {
 ipcMain.on('overlay-edit-update', (_event, payload) => {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('overlay-edit-update', payload);
+  }
+});
+
+// Same idea as overlay-edit-update above, for dragging the timer overlay
+// bar directly in the real (usually click-through) overlay window --
+// that's the only place the bar is actually visible/draggable at all
+// (the main window keeps it hidden, see html.electron-main-window #ovBar
+// in the CSS), so a drag ending there needs to relay the final position
+// back to the main window, which owns saving it to localStorage and is
+// what the settings panel's own state reflects.
+ipcMain.on('overlay-position-update', (_event, payload) => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('overlay-position-update', payload);
   }
 });
 
