@@ -1541,19 +1541,7 @@
   .ov-bar-core {
     display: flex;
     align-items: stretch;
-    border-radius: 999px;
-    overflow: hidden;
-    /* 1.5px, not 1: confirmed via pixel measurement that a 1px line is
-       physically identical everywhere regardless of what sits behind it
-       (the score segment's own background color included) -- but a
-       single opaque pixel reads as visually "thinner"/less crisp against
-       a brighter background than against a near-black one, purely due to
-       lower contrast, even though nothing about the line itself changed.
-       A bit more width keeps it reading as solidly present either way. */
-    border: 2px solid var(--ov-outline, rgba(255,255,255,0.85));
-    background: rgba(23,20,21,0.92);
-    backdrop-filter: blur(10px);
-    box-shadow: 0 6px 28px rgba(0,0,0,0.6), 0 0 26px rgba(180,20,30,0.18);
+    gap: 2px;
   }
   /* A real multi-colour gradient border doesn't work cleanly on a
      rounded/pill shape like this one -- border-image (the only CSS way
@@ -1561,8 +1549,8 @@
      it would show square corners poking out past the pill's curve.
      Cycling the plain border-color through the rainbow over time sidesteps
      that limitation completely while still genuinely showing every colour,
-     just sequentially instead of all at once. overrides the static
-     var(--ov-outline) border-color above while active. */
+     just sequentially instead of all at once. Applied to all three boxes
+     together (not just one shared border) so they all cycle in sync. */
   @keyframes ovRainbowOutline {
     0%   { border-color: #e40303; }
     16.6%{ border-color: #ff8c00; }
@@ -1572,23 +1560,19 @@
     83.3%{ border-color: #750787; }
     100% { border-color: #e40303; }
   }
-  .ov-bar-core.rainbow-outline {
-    animation: ovRainbowOutline 6s linear infinite;
-  }
-  /* The score-box divider lines (the two thin strokes flanking "0 - 0")
-     use this same var(--ov-outline) colour, drawn as a real border rather
-     than a background fill (see the comment further down on
-     .ov-bar-score::before/::after for why). Without this, they'd stay
-     stuck on the static rainbow fallback colour while the pill's own
-     outer border visibly cycles right next to them -- same animation,
-     same timing, so both read as one continuous rainbow outline instead
-     of the dividers looking like a stuck, duller, mismatched colour. */
-  .ov-bar-core.rainbow-outline .ov-bar-score::before,
-  .ov-bar-core.rainbow-outline .ov-bar-score::after {
+  .ov-bar-core.rainbow-outline .ov-bar-name,
+  .ov-bar-core.rainbow-outline .ov-bar-score {
     animation: ovRainbowOutline 6s linear infinite;
   }
   .ov-bar-name {
-    border-radius: 0;
+    /* Rounded on the outer end only, square on the end facing the score
+       box in the middle -- set per-side just below (:first-child /
+       :last-child), this is just the fallback/base value. */
+    border-radius: 999px;
+    border: 2px solid var(--ov-outline, rgba(255,255,255,0.85));
+    background: rgba(23,20,21,0.92);
+    backdrop-filter: blur(10px);
+    box-shadow: 0 6px 28px rgba(0,0,0,0.6), 0 0 26px rgba(180,20,30,0.18);
     color: #f2e6de;
     font-weight: 700;
     font-size: 22px;
@@ -1603,8 +1587,33 @@
     overflow: hidden;
     justify-content: center;
   }
+  /* Player 1 (first): rounded on its outer/left side, square on the side
+     facing the score box. Player 2 (last): the mirror image -- square
+     facing the score box, rounded on its outer/right side. */
+  /* NOT 999px here despite wanting a fully-rounded pill end: CSS
+     proportionally shrinks BOTH radii on the same edge if their sum
+     exceeds that edge's length, using their original ratio -- pairing an
+     extreme 999px with a deliberately small 10px on the same 174px-wide
+     edge meant the 10px corner got scaled down to a near-invisible
+     fraction of a pixel by that same math, which is exactly why it was
+     rendering as a hard square instead of the intended small rounded
+     corner. 30px is already far more than half this box's own height (so
+     it still clamps into a full pill curve on its own, same visual result
+     as 999px would give alone) without being so disproportionate to 10px
+     that the browser's own overlap-prevention math flattens the smaller
+     one to nothing. */
+  .ov-bar-core .ov-bar-name:first-child { border-radius: 30px 10px 10px 30px; }
+  .ov-bar-core .ov-bar-name:last-child  { border-radius: 10px 30px 30px 10px; }
   .ov-bar-score {
     position: relative;
+    /* Deliberately rectangular (not the fully-rounded 999px pill the two
+       name boxes use) -- matches the shape actually asked for: pill,
+       rectangle, pill, not three matching pills. */
+    border-radius: 10px;
+    border: 2px solid var(--ov-outline, rgba(255,255,255,0.85));
+    background: rgba(23,20,21,0.92);
+    backdrop-filter: blur(10px);
+    box-shadow: 0 6px 28px rgba(0,0,0,0.6), 0 0 26px rgba(180,20,30,0.18);
     color: #ffffff;
     font-weight: 700;
     font-size: 23px;
@@ -1616,31 +1625,8 @@
     white-space: nowrap;
     width: 104px;
     flex: none;
-    /* NOT overflow:hidden here: the divider lines below are deliberately
-       positioned 1px outside this box's own edges so they merge into the
-       outer pill's border instead of stopping short of it. overflow:hidden
-       would clip that 1px away, making the dividers look shorter/duller
-       than the outer border. fitPillText() already shrinks the score text
-       to fit, so nothing actually needs clipping here. */
+    overflow: hidden;
   }
-  /* Deliberately overlap this into the outer pill border (rather than
-     stopping short of it, or trying to land exactly on the same pixel) so
-     the two lines merge into one solid stroke instead of showing a messy,
-     uneven joint where they'd otherwise meet edge-to-edge. Using a real
-     `border` (not a `background` fill) here matters: it's the same
-     rendering/anti-aliasing path the outer pill's own border uses, so the
-     two end up the same visual intensity instead of the fill looking
-     duller at the same color+opacity. Width and inset both match the
-     outer border's own 1.5px exactly, for the same reason. */
-  .ov-bar-score::before, .ov-bar-score::after {
-    content: '';
-    position: absolute;
-    top: -2px; bottom: -2px;
-    width: 0;
-    border-left: 2px solid var(--ov-outline, rgba(255,255,255,0.85));
-  }
-  .ov-bar-score::before { left: 0; }
-  .ov-bar-score::after { right: 0; }
   .ov-score-dash-inline {
     user-select: none;
     -webkit-user-select: none;
@@ -1934,8 +1920,6 @@
   .ov-side-timer.leading.rainbow-win {
     animation: ovRainbowWinTimer 6s linear infinite;
   }
-  .ov-bar-core .ov-bar-name:first-child { border-radius: 999px 0 0 999px; }
-  .ov-bar-core .ov-bar-name:last-child  { border-radius: 0 999px 999px 0; }
   .ov-bar-name.leading {
     position: relative;
     box-shadow: inset 0 0 0 1px var(--ov-win-soft, rgba(224,58,47,0.85)), inset 0 0 22px var(--ov-win-glow, rgba(224,58,47,0.28));
@@ -4198,6 +4182,17 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
   // the background lives on the OUTER element and the text lives on the
   // INNER span(s) -- two completely independent CSS layers, so any
   // combination of rainbow/solid/transparent works for both at once.
+  // The default dark fill each box already has from its own CSS (see
+  // .ov-bar-name / .ov-bar-score) -- used below so picking "No color" for
+  // a background means "just the normal dark backing", not literally
+  // see-through. Before these three were separate boxes, a shared parent
+  // painted this same dark fill behind all of them regardless of each
+  // segment's own color choice, which is what gave the bar a solid
+  // "shape" even with every segment set to no color; splitting them into
+  // independent boxes meant each one taking bgVal literally (including
+  // the CSS keyword 'transparent') lost that shared backdrop entirely.
+  var OV_DEFAULT_FILL = 'rgba(23,20,21,0.92)';
+
   function applyTextAndBg(outerEl, innerEls, textVal, bgVal){
     if(bgVal === 'rainbow'){
       outerEl.style.backgroundImage = RAINBOW_GRADIENT;
@@ -4206,7 +4201,7 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
       outerEl.style.backgroundRepeat = 'no-repeat';
       outerEl.style.backgroundColor = '';
     } else {
-      outerEl.style.backgroundColor = bgVal;
+      outerEl.style.backgroundColor = (bgVal === 'transparent') ? OV_DEFAULT_FILL : bgVal;
       outerEl.style.backgroundImage = 'none';
     }
     (Array.isArray(innerEls) ? innerEls : [innerEls]).forEach(function(el){
@@ -4221,42 +4216,42 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
   //
   // The first version of this measured each of the three elements'
   // on-screen position with getBoundingClientRect() and sized/positioned
-  // each one's OWN background as a slice of one big virtual gradient --
-  // technically workable, but sensitive to sub-pixel rounding differences
-  // between three SEPARATELY measured elements (border/flex-gap rounding,
-  // layout not yet settled at measurement time, etc.), which could leave
-  // a sliver of one segment -- reliably the last one, Player 2 -- past
-  // where its slice of the sized image actually ended, rendering blank
-  // there instead of showing color.
-  //
-  // Sidesteps all of that: put ONE gradient on the shared parent
-  // (ovBarCore) that already visually contains all three segments, sized
-  // to ITS OWN box, and make the three segments' own backgrounds
-  // transparent so that single gradient shows through underneath them
-  // seamlessly. No per-element measuring or arithmetic at all -- there's
-  // only one gradient and one box, so there's nothing that can drift out
-  // of alignment with anything else.
+  // Player 1 / Score / Player 2 are three separate boxes now (each with
+  // its own border/background), not one continuous pill -- so a single
+  // gradient painted on a shared parent and revealed through transparent
+  // children (the old approach) no longer works, since each box's own
+  // opaque background would just cover it. Instead, each box gets the
+  // SAME gradient sized to the combined width of all three (174+2+104+2+
+  // 174 = 456px, matching their hardcoded CSS widths and the 2px gaps
+  // between them exactly) with a background-position offset matching
+  // where that box sits in the row -- so together they still read as one
+  // continuous gradient, just with a couple of 2px seams where the gap
+  // shows through, rather than a single element being sliced apart.
   function applyContinuousRainbowBg(){
-    if(!ovBarCore) return;
+    if(!ovBarP1 || !ovBarScore || !ovBarP2) return;
     var allRainbow = ovColors.p1Bg==='rainbow' && ovColors.scoreBg==='rainbow' && ovColors.p2Bg==='rainbow';
+    var TOTAL_W = 456; // 174 (p1) + 2 (gap) + 104 (score) + 2 (gap) + 174 (p2)
     if(allRainbow){
-      ovBarCore.style.backgroundImage = RAINBOW_GRADIENT;
-      ovBarCore.style.backgroundSize = '100% 100%';
-      ovBarCore.style.backgroundPosition = '0 0';
-      ovBarCore.style.backgroundRepeat = 'no-repeat';
-      [ovBarP1, ovBarScore, ovBarP2].forEach(function(el){
-        el.style.backgroundImage = 'none';
-        el.style.backgroundColor = 'transparent';
+      [
+        [ovBarP1, 0],
+        [ovBarScore, 176],
+        [ovBarP2, 282]
+      ].forEach(function(pair){
+        var el = pair[0], offset = pair[1];
+        el.style.backgroundImage = RAINBOW_GRADIENT;
+        el.style.backgroundSize = TOTAL_W + 'px 100%';
+        el.style.backgroundPosition = (-offset) + 'px 0';
+        el.style.backgroundRepeat = 'no-repeat';
       });
     } else {
-      // Not all three -- clear the shared gradient so ovBarCore's normal
-      // CSS background (its own dark fill) shows again, and let each
+      // Not all three -- clear the shared-gradient positioning so each
       // segment's own background (already set correctly above, by the
-      // applyTextAndBg calls before this function runs) stand on its own.
-      ovBarCore.style.backgroundImage = '';
-      ovBarCore.style.backgroundSize = '';
-      ovBarCore.style.backgroundPosition = '';
-      ovBarCore.style.backgroundRepeat = '';
+      // applyTextAndBg calls before this function runs) stands on its own.
+      [ovBarP1, ovBarScore, ovBarP2].forEach(function(el){
+        el.style.backgroundSize = '';
+        el.style.backgroundPosition = '';
+        el.style.backgroundRepeat = '';
+      });
     }
   }
 
@@ -5860,10 +5855,24 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
     var norm = function(s){ return s.toLowerCase().replace(/[^a-z0-9]/g,''); };
     var target = norm(raw);
     if(!target) return false;
+    // Exact match only -- by the time this runs, `raw` is always the
+    // already-correct, verbatim name map-detect.js's own matching logic
+    // picked (see captureMapName below, which passes result.match.name
+    // straight through), so no fuzziness is needed or wanted here.
+    // The previous version also accepted a substring match in EITHER
+    // direction (n.indexOf(target) or target.indexOf(n)), meant to
+    // tolerate minor OCR noise -- but that's exactly what broke matching
+    // for any base map whose name is a PREFIX of one of its own numbered
+    // variants: "Suffocation Pit" is a substring of "Suffocation Pit
+    // II", so if the "II" variant happened to sit earlier in MAP_DATA,
+    // it matched (and won, via the loop's break) before the correct
+    // exact entry was ever reached -- confirmed live: map-detect.js
+    // itself correctly identified "Suffocation Pit" (shown correctly in
+    // the status text), yet the map that actually got applied here was
+    // "Suffocation Pit II", solely because of this substring fallback.
     var bestIdx = -1;
     for(var i=0;i<window.MAP_DATA.length;i++){
-      var n = norm(window.MAP_DATA[i].name);
-      if(n === target || n.indexOf(target) !== -1 || target.indexOf(n) !== -1){ bestIdx = i; break; }
+      if(norm(window.MAP_DATA[i].name) === target){ bestIdx = i; break; }
     }
     if(bestIdx === -1) return false;
     mapCurrent = bestIdx;
