@@ -517,8 +517,18 @@ async function initM1Feature() {
 // working regardless of that. Useful for troubleshooting a specific
 // visual bug report without needing to rebuild with the menu re-enabled
 // just for that.
+//
+// Gated on app.isPackaged: only works when running from source (`npm
+// start` / `electron .`), never in the built .exe end users download
+// from GitHub Releases. Without this, anyone running the installed app
+// could open DevTools and freely inspect/edit the live UI (Elements
+// panel, console, etc.) -- harmless in the sense that it's local-only
+// and never touches the actual files on disk, but there's no reason to
+// hand that capability to every end user when it's really a
+// development/troubleshooting aid.
 function attachDevToolsShortcut(win) {
   win.webContents.on('before-input-event', (_event, input) => {
+    if (app.isPackaged) return;
     if (input.type !== 'keyDown') return;
     const isF12 = input.key === 'F12';
     const isCtrlShiftI = input.control && input.shift && input.key.toLowerCase() === 'i';
