@@ -153,6 +153,33 @@ async function isDbdFocused() {
   }
 }
 
+// True while any of this app's own windows (main window, or either
+// overlay) currently holds OS focus -- checked as an OR alongside
+// isDbdFocused for every keyboard/mouse hotkey (see
+// isDbdOrAppFocused below), so binding, say, "R" to Start Timer and
+// then clicking into the app's own settings window to change something
+// doesn't itself get treated as "not Dead by Daylight" and silently
+// swallow the press.
+function isOwnAppFocused() {
+  if (mainWindow && !mainWindow.isDestroyed() && mainWindow.isFocused()) return true;
+  if (timerOverlayWindow && !timerOverlayWindow.isDestroyed() && timerOverlayWindow.isFocused()) return true;
+  if (mapOverlayWindow && !mapOverlayWindow.isDestroyed() && mapOverlayWindow.isFocused()) return true;
+  return false;
+}
+
+// The general-purpose version of isDbdFocused, on request: gates EVERY
+// keyboard and mouse hotkey (not just M1) behind "Dead by Daylight or
+// this app itself has focus" -- so binding hotkeys to ordinary keys
+// (not just dedicated F-keys) doesn't risk them firing while browsing,
+// using Discord, etc. with neither the game nor the app focused.
+// Deliberately NOT applied to controller/gamepad bindings -- those stay
+// exactly as they already were (always active), matching an earlier,
+// explicit request to leave the controller path alone.
+async function isDbdOrAppFocused() {
+  if (isOwnAppFocused()) return true;
+  return isDbdFocused();
+}
+
 function refreshSharedHookState() {
   if (!uIOhookInstance) return;
   const needed = specialBindings.size > 0 || capturingMouseButtons;
@@ -376,11 +403,19 @@ async function initM1Feature() {
     const activeWinModule = await import('active-win');
     activeWindowFn = activeWinModule.default || activeWinModule.activeWindow;
 
-    uIOhookInstance.on('keydown', (e) => {
+    uIOhookInstance.on('keydown', async (e) => {
       if (specialBindings.size === 0) return;
       for (const [keyName, actionId] of specialBindings) {
         if (keyName === 'M1' || keyName === 'M2' || keyName === 'M4' || keyName === 'M5') continue; // handled in the mousedown listener below
         if (e.keycode === SPECIAL_UIOHOOK_KEYCODE[keyName]) {
+          // Same focus check as every other keyboard/mouse hotkey now --
+          // a bare Shift/Ctrl/Alt binding is just as easy to press
+          // unintentionally while doing something else on the PC as any
+          // ordinary key, so it gets the same treatment.
+          if (!(await isDbdOrAppFocused())) {
+            console.log('[hotkeys]', keyName, '->', actionId, 'but neither Dead by Daylight nor this app has focus -- skipped');
+            return;
+          }
           if (!shouldDispatchHotkey(actionId)) {
             console.log('[hotkeys]', keyName, '-> bound to', actionId, 'but wrong screen active (', activeScreen, ') -- skipped');
             return;
@@ -423,13 +458,13 @@ async function initM1Feature() {
 
       const actionId = specialBindings.get(buttonName);
       if (!actionId) return;
-      // M1 specifically (not M2/M4/M5, which still fire anywhere per an
-      // earlier explicit request) only dispatches while Dead by Daylight
-      // itself is the focused window -- re-added on request; see
-      // isDbdFocused's own comment for why this one button is treated
-      // differently from every other bindable mouse button/key here.
-      if (buttonName === 'M1' && !(await isDbdFocused())) {
-        console.log('[mouse] M1 ->', actionId, 'but Dead by Daylight is not the focused window -- skipped');
+      // Every bound mouse button (M1, M2, M4, M5 alike) now requires
+      // Dead by Daylight or this app's own windows to have focus -- on
+      // request, extending the check M1 alone already had to the other
+      // three too, so none of them can fire while doing something
+      // unrelated on the PC with neither the game nor the app focused.
+      if (!(await isDbdOrAppFocused())) {
+        console.log('[mouse]', buttonName, '->', actionId, 'but neither Dead by Daylight nor this app has focus -- skipped');
         return;
       }
       if (!shouldDispatchHotkey(actionId)) {
@@ -669,52 +704,40 @@ function keyToAccelerator(key) {
 // globalShortcut fighting with the uiohook mouse hook at a lower level
 // than expected). That distinction is needed before making any further
 // change here, rather than guessing again.
-function applyHotkeyBindings(bindings) {
-  console.log('[hotkeys] applyHotkeyBindings called with', (bindings || []).length, 'bindings:',
-    JSON.stringify(bindings));
+// True while the regular-key bindings (the ones routed through
+// Electron's globalShortcut, i.e. everything except mouse clicks and
+// bare modifier keys, which go through uiohook instead and don't have
+// this problem) are currently actually claimed at the OS level.
+// globalShortcut.register() doesn't just "listen" for a key -- it
+// claims it EXCLUSIVELY system-wide, so as long as e.g. "F" is
+// registered, pressing F never reaches Discord or a browser either,
+// REGARDLESS of any in-callback focus check. The only real fix is to
+// unregister the key entirely the moment focus leaves Dead by Daylight/
+// this app, and re-register it the moment focus returns -- tracked here
+// so the polling loop below knows which direction to move in.
+let globalShortcutsClaimed = false;
 
-  globalShortcut.unregisterAll();
+// Actually performs the globalShortcut.register() calls for the current
+// lastHotkeyBindings, if any. Split out from applyHotkeyBindings so the
+// focus-poll loop below can call this same logic on a focus transition,
+// not just when the bindings themselves change.
+function claimGlobalShortcuts() {
+  if (globalShortcutsClaimed) return;
+  globalShortcutsClaimed = true;
   registeredAccelerators.clear();
-  specialBindings.clear();
 
-  (bindings || []).forEach(({ id, key }) => {
-    if (key === 'M1' || key === 'M2' || key === 'M4' || key === 'M5') {
-      // Mouse clicks: routed to the uiohook mousedown listener (with its
-      // own Dead by Daylight focus check) instead of globalShortcut,
-      // which has no concept of mouse buttons at all.
-      specialBindings.set(key, id);
-      console.log('[hotkeys]', key, 'for', id, '-> routed to the uiohook mouse-click path (not globalShortcut)');
-      return;
-    }
-    if (key && SPECIAL_UIOHOOK_KEYCODE.hasOwnProperty(key)) {
-      // Shift/Control/Alt alone: Electron's globalShortcut cannot register
-      // these at all, so this goes through the uiohook keyboard hook
-      // instead (see SPECIAL_UIOHOOK_KEYCODE / refreshSharedHookState).
-      specialBindings.set(key, id);
-      console.log('[hotkeys]', key, 'for', id, '-> routed to the uiohook modifier-key path (not globalShortcut)');
-      return;
-    }
+  (lastHotkeyBindings || []).forEach(({ id, key }) => {
+    if (key === 'M1' || key === 'M2' || key === 'M4' || key === 'M5') return; // uiohook path, not this one
+    if (key && SPECIAL_UIOHOOK_KEYCODE.hasOwnProperty(key)) return; // uiohook path, not this one
 
     const accelerator = keyToAccelerator(key);
-    if (!accelerator) {
-      if (key) console.log('[hotkeys] "' + key + '" for', id, '-> no accelerator mapping, skipped');
-      return;
-    }
+    if (!accelerator) return;
     if (registeredAccelerators.has(accelerator)) {
       console.warn('[hotkeys]', accelerator, 'for', id, '-> already used by', registeredAccelerators.get(accelerator), 'in this same batch, skipped');
       return;
     }
 
-    const ok = globalShortcut.register(accelerator, async () => {
-      // Same Dead by Daylight focus check as the mouse-click M1 path,
-      // for this action id's own dedicated keyboard binding (the "M1
-      // Equivalent" key in the Crouch/M1 section) -- see isDbdFocused's
-      // comment for the reasoning; this is the same trigger, just bound
-      // to a keyboard key instead of the literal mouse button.
-      if (id === 'm1' && !(await isDbdFocused())) {
-        console.log('[hotkeys]', accelerator, '-> bound to', id, 'but Dead by Daylight is not the focused window -- skipped');
-        return;
-      }
+    const ok = globalShortcut.register(accelerator, () => {
       if (!shouldDispatchHotkey(id)) {
         console.log('[hotkeys]', accelerator, '-> bound to', id, 'but wrong screen active (', activeScreen, ') -- skipped');
         return;
@@ -727,24 +750,80 @@ function applyHotkeyBindings(bindings) {
       }
     });
 
-    const actuallyRegistered = globalShortcut.isRegistered(accelerator);
-    console.log('[hotkeys] register(', accelerator, ') for', id, '-> register() returned', ok,
-      ', isRegistered() confirms:', actuallyRegistered);
-
     if (ok) {
       registeredAccelerators.set(accelerator, id);
     } else {
-      // Most likely cause per Electron's own docs: another application (or
-      // the OS itself) already has this exact key combination registered,
-      // and Electron silently declines rather than fighting over it.
       console.warn('[hotkeys] FAILED to register', accelerator, 'for', id,
         '-- likely already owned by another running application or the OS.');
     }
   });
 
-  console.log('[hotkeys] done. Currently registered via globalShortcut:', Array.from(registeredAccelerators.entries()),
-    '; via uiohook special path:', Array.from(specialBindings.entries()));
+  console.log('[hotkeys] claimed (Dead by Daylight or this app has focus). Registered:', Array.from(registeredAccelerators.entries()));
+}
+
+// The inverse -- fully releases every regular key back to normal OS/
+// other-app use. Deliberately does NOT touch specialBindings (the
+// uiohook-routed mouse/modifier-key path) -- those were never claimed
+// exclusively in the first place, so there's nothing to release there.
+function releaseGlobalShortcuts() {
+  if (!globalShortcutsClaimed) return;
+  globalShortcutsClaimed = false;
+  globalShortcut.unregisterAll();
+  registeredAccelerators.clear();
+  console.log('[hotkeys] released (neither Dead by Daylight nor this app has focus) -- regular keys are free for normal typing again.');
+}
+
+// Polls the same focus check as every hotkey dispatch site, purely to
+// claim/release the regular-key bindings at the right moments -- kept
+// deliberately much slower than the gamepad poll (focus doesn't change
+// anywhere near as often as a button press does), so this doesn't add
+// meaningful overhead.
+let focusPollInterval = null;
+async function pollFocusAndUpdateClaim() {
+  const focused = await isDbdOrAppFocused();
+  if (focused) claimGlobalShortcuts();
+  else releaseGlobalShortcuts();
+}
+function startFocusPoll() {
+  pollFocusAndUpdateClaim(); // immediately, so there's no up-to-500ms gap before the first real check
+  if (focusPollInterval) return;
+  focusPollInterval = setInterval(pollFocusAndUpdateClaim, 500);
+}
+
+function applyHotkeyBindings(bindings) {
+  console.log('[hotkeys] applyHotkeyBindings called with', (bindings || []).length, 'bindings:',
+    JSON.stringify(bindings));
+
+  // Regular-key registration itself now happens in claimGlobalShortcuts,
+  // driven by the focus poll above -- unclaim first so a rebind while
+  // currently claimed doesn't leave a stale accelerator registered
+  // alongside the new one, then let the very next poll tick (at most
+  // 500ms away) re-claim with the fresh bindings if focus still
+  // qualifies.
+  releaseGlobalShortcuts();
+  specialBindings.clear();
+
+  (bindings || []).forEach(({ id, key }) => {
+    if (key === 'M1' || key === 'M2' || key === 'M4' || key === 'M5') {
+      // Mouse clicks: routed to the uiohook mousedown listener (with its
+      // own Dead by Daylight-or-app focus check) instead of
+      // globalShortcut, which has no concept of mouse buttons at all.
+      specialBindings.set(key, id);
+      console.log('[hotkeys]', key, 'for', id, '-> routed to the uiohook mouse-click path (not globalShortcut)');
+      return;
+    }
+    if (key && SPECIAL_UIOHOOK_KEYCODE.hasOwnProperty(key)) {
+      // Shift/Control/Alt alone: Electron's globalShortcut cannot register
+      // these at all, so this goes through the uiohook keyboard hook
+      // instead (see SPECIAL_UIOHOOK_KEYCODE / refreshSharedHookState).
+      specialBindings.set(key, id);
+      console.log('[hotkeys]', key, 'for', id, '-> routed to the uiohook modifier-key path (not globalShortcut)');
+      return;
+    }
+  });
+
   refreshSharedHookState();
+  startFocusPoll();
 }
 
 // ---------------------------------------------------------------------
