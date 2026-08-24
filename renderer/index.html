@@ -158,8 +158,15 @@
     color: #f2e6de;
   }
   .app-titlebar-btn.active {
-    color: #d9564f;
+    color: #7fe8bd;
   }
+  /* Mute button specifically: red/coral by default (sound on), green
+     when muted (matches the app's existing "toggle active" convention
+     used everywhere else -- see .ov-switch.on, .module-tag.ready).
+     Scoped to the ID so it doesn't affect any other titlebar button
+     that might use .active for something else in the future. */
+  #titlebarMuteBtn { color: #7fe8bd; }
+  #titlebarMuteBtn.active { color: #d9564f; }
   .app-titlebar-btn.app-titlebar-close:hover {
     background: #c4302b;
     color: #fff;
@@ -260,6 +267,12 @@
 
   /* ---------- screens ---------- */
   .screen { display: none; }
+  .screen.active-flex, .screen.active-block { opacity: 0; transition: opacity 0.18s ease; }
+  .screen.active-flex.screen-in, .screen.active-block.screen-in { opacity: 1; }
+  /* Hub keeps its own dedicated iris reveal (see .reveal/irisIn below) --
+     excluded here (via ID specificity, which beats the class rule above)
+     so the generic fade doesn't run at the same time as it. */
+  #screen-hub.active-flex { opacity: 1; transition: none; }
   .screen.active-flex { display: flex; }
   .screen.active-block { display: block; }
 
@@ -409,6 +422,9 @@
   }
   .module-card.disabled { opacity: 0.45; cursor: default; }
   .module-name { font-family: 'Cinzel', serif; font-weight: 700; font-size: 19px; color: #f2e6de; }
+  .module-header { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+  .module-icon { flex-shrink: 0; color: #a89890; transition: color 0.15s ease; }
+  .module-card.active:hover .module-icon { color: #7fe8bd; }
   .module-desc { font-size: 14.5px; color: #a89890; margin-top: 5px; }
   .module-card > div { min-width: 0; flex: 1; }
   .module-tag {
@@ -2560,9 +2576,11 @@
 
 <div class="screen" id="screen-gate">
   <div class="hatch">
-    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect x="3" y="3" width="18" height="18" rx="2" stroke="#e9d9d0" stroke-width="1.3"/>
-      <path d="M3 9h18M3 15h18M9 3v18M15 3v18" stroke="#e9d9d0" stroke-width="1"/>
+    <svg viewBox="0 0 24 24" width="96" height="96" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M2 12c3-4.2 7-6.2 10-6.2s7 2 10 6.2c-3 4.2-7 6.2-10 6.2s-7-2-10-6.2z" stroke="#e9d9d0" stroke-width="1.1" stroke-linejoin="round"/>
+      <path d="M2 12l3-2.2M2 12l3 2.2M22 12l-3-2.2M22 12l-3 2.2" stroke="#e9d9d0" stroke-width="0.9" stroke-linecap="round"/>
+      <circle cx="12" cy="9.6" r="1.4" fill="#e9d9d0"/>
+      <path d="M9.2 16c0-1.9 1.25-3.2 2.8-3.2s2.8 1.3 2.8 3.2" stroke="#e9d9d0" stroke-width="1.1" stroke-linecap="round"/>
     </svg>
   </div>
   <div class="gate-text">Click to enter</div>
@@ -2576,14 +2594,30 @@
       <div class="modules">
         <div class="module-card active" id="moduleMoonwalk" onclick="enterTrainer(this)">
           <div>
-            <div class="module-name">Moonwalk Trainer</div>
+            <div class="module-header">
+              <svg class="module-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M8 3c-1.4 0-2.4 1.3-2.2 2.6l.6 4.4c.1 1 1 1.7 2 1.7h.4c1 0 1.9-.7 2-1.7l.6-4.4C11.6 4.3 10.6 3 9.2 3H8z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>
+                <path d="M16 10c-1.4 0-2.4 1.3-2.2 2.6l.6 4.4c.1 1 1 1.7 2 1.7h.4c1 0 1.9-.7 2-1.7l.6-4.4C19.6 11.3 18.6 10 17.2 10H16z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>
+                <path d="M4 21l4-3M20 14l-4 3" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-dasharray="1.5 2.2"/>
+              </svg>
+              <div class="module-name">Moonwalk Trainer</div>
+            </div>
             <div class="module-desc">Rhythm-train the A/D footwork behind the moonwalk tech</div>
           </div>
           <span class="module-tag ready">Ready</span>
         </div>
         <div class="module-card active" id="moduleVault" onclick="enterVault(this)">
           <div>
-            <div class="module-name">Vault / Pallet Timing</div>
+            <div class="module-header">
+              <svg class="module-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <g transform="rotate(-25 12 11)">
+                  <rect x="5" y="9" width="14" height="5" rx="0.8" stroke="currentColor" stroke-width="1.2"/>
+                  <path d="M8.5 9v5M12 9v5M15.5 9v5" stroke="currentColor" stroke-width="0.8"/>
+                </g>
+                <path d="M6 19c2-1 4-1 6 0M14 20c1.5-.7 3-.7 4.5 0" stroke="currentColor" stroke-width="1" stroke-linecap="round"/>
+              </svg>
+              <div class="module-name">Vault / Pallet Timing</div>
+            </div>
             <div class="module-desc">Fast vault and pallet drop spacebar reflexes</div>
           </div>
           <span class="module-tag ready">Ready</span>
@@ -2599,14 +2633,27 @@
       <div class="modules">
         <div class="module-card active" id="module1v1" onclick="enter1v1(this)">
           <div>
-            <div class="module-name">1v1 Timer</div>
+            <div class="module-header">
+              <svg class="module-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="12" cy="13" r="8" stroke="currentColor" stroke-width="1.2"/>
+                <path d="M12 13V8.5M12 13l3.2 2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+                <path d="M9.5 2h5M12 2v2.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+              </svg>
+              <div class="module-name">1v1 Timer</div>
+            </div>
             <div class="module-desc">Scoreboard and match timer overlay for 1v1s</div>
           </div>
           <span class="module-tag ready">Ready</span>
         </div>
         <div class="module-card active" id="moduleMaps" onclick="enterMaps(this)">
           <div>
-            <div class="module-name">Maps / Clocks Overlays</div>
+            <div class="module-header">
+              <svg class="module-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M4 6.5L9 5l6 2 5-1.5v13L15 20l-6-2-5 1.5v-13z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>
+                <path d="M9 5v13M15 7v13" stroke="currentColor" stroke-width="1"/>
+              </svg>
+              <div class="module-name">Maps / Clocks Overlays</div>
+            </div>
             <div class="module-desc">Map overlays showing the 1-12 clock numbers to help you read your position</div>
           </div>
           <span class="module-tag ready">Ready</span>
@@ -3056,9 +3103,15 @@
   window.showScreen = function(name){
     screens.forEach(function(s){
       var el = document.getElementById('screen-'+s);
-      el.classList.remove('active-flex','active-block');
+      el.classList.remove('active-flex','active-block','screen-in');
       if(s===name){
         el.classList.add(SCREEN_MODE[s]==='flex' ? 'active-flex' : 'active-block');
+        // Forces the browser to paint the display:none -> flex/block
+        // change as its own frame before opacity starts transitioning,
+        // otherwise both changes land in the same frame and there's
+        // nothing for the transition to visibly interpolate from.
+        void el.offsetWidth;
+        el.classList.add('screen-in');
       }
     });
     window.currentScreen = name;
@@ -3161,19 +3214,19 @@
   var titlebarMuteIcon = document.getElementById('titlebarMuteIcon');
   var SPEAKER_ON_ICON = '<path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor"/><path d="M16 9c1.2 1 1.2 5 0 6M18.5 7c2.2 2 2.2 8 0 10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>';
   var SPEAKER_MUTED_ICON = '<path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor"/><path d="M16 9l5 6M21 9l-5 6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>';
-  function updateGlobalMuteButtonUI(muted){
+  window.updateGlobalMuteButtonUI = function(muted){
     if(!titlebarMuteBtn || !titlebarMuteIcon) return;
     titlebarMuteIcon.innerHTML = muted ? SPEAKER_MUTED_ICON : SPEAKER_ON_ICON;
     var label = muted ? 'Unmute' : 'Mute all sound';
     titlebarMuteBtn.title = label;
     titlebarMuteBtn.setAttribute('aria-label', label);
     titlebarMuteBtn.classList.toggle('active', muted);
-  }
+  };
   if(titlebarMuteBtn){
     titlebarMuteBtn.addEventListener('click', function(e){
       e.stopPropagation();
       var muted = window.toggleGlobalMute ? window.toggleGlobalMute() : false;
-      updateGlobalMuteButtonUI(muted);
+      window.updateGlobalMuteButtonUI(muted);
     });
   }
 
@@ -3330,25 +3383,76 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
   // -- those stay exactly as set in Options, this just temporarily
   // drives the real audible values to 0 and restores them on unmute.
   // Deliberately does NOT go through setMusicVolume/setSfxVolume (which
-  // both write to localStorage) for that same reason.
+  // both write to localStorage) for that same reason. The mute STATE
+  // itself (globalMuted) is separately persisted below, so it survives
+  // an app restart -- if the person quits while muted, it comes back up
+  // muted too, rather than always resetting to unmuted.
+  //
+  // Everything below is wrapped in try/catch: this exact block has
+  // caused the whole app to silently break (no sound, close button
+  // unresponsive, maps list empty, hotkeys stopped working) twice in a
+  // row during testing, with no error found on static review -- so
+  // whatever the actual cause turns out to be, it must not be able to
+  // halt the rest of this script's initialization again the way it has
+  // been.
   var globalMuted = false;
   var globalMutePrevMusicVolume = null;
   var globalMutePrevUiVolume = null;
-  window.toggleGlobalMute = function(){
-    globalMuted = !globalMuted;
+  try {
+    globalMuted = localStorage.getItem('dbd_globalMuted') === '1';
     if(globalMuted){
       globalMutePrevMusicVolume = musicVolume;
       globalMutePrevUiVolume = uiVolume;
       musicVolume = 0;
       uiVolume = 0;
-      if(musicGain) musicGain.gain.value = 0;
-    } else {
-      musicVolume = globalMutePrevMusicVolume!==null ? globalMutePrevMusicVolume : musicVolume;
-      uiVolume = globalMutePrevUiVolume!==null ? globalMutePrevUiVolume : uiVolume;
-      // Respects the existing focus-ducking behaviour (music is silent
-      // while the window is unfocused) instead of forcing it back on
-      // regardless of focus state.
-      if(musicGain) musicGain.gain.value = (document.hasFocus() ? musicVolume : 0) * MUSIC_VOLUME_SCALE;
+    }
+    window.updateGlobalMuteButtonUI(globalMuted);
+  } catch(err) {
+    console.error('[global-mute] init failed:', err);
+    globalMuted = false;
+  }
+  window.toggleGlobalMute = function(){
+    try {
+      globalMuted = !globalMuted;
+      localStorage.setItem('dbd_globalMuted', globalMuted ? '1' : '0');
+      if(globalMuted){
+        globalMutePrevMusicVolume = musicVolume;
+        globalMutePrevUiVolume = uiVolume;
+        musicVolume = 0;
+        uiVolume = 0;
+        // Ramped instead of an instant jump to 0 -- setting gain.value
+        // directly creates a discontinuity in the waveform (a step from
+        // whatever it was straight to silence), which is audible as a
+        // sharp click/crackle rather than a clean mute. Ramping over a
+        // short 80ms window instead means the amplitude eases down
+        // smoothly, the way any real audio software handles mute.
+        if(musicGain && audioCtx){
+          var now1 = audioCtx.currentTime;
+          musicGain.gain.cancelScheduledValues(now1);
+          musicGain.gain.setValueAtTime(musicGain.gain.value, now1);
+          musicGain.gain.linearRampToValueAtTime(0, now1 + 0.08);
+        } else if(musicGain) {
+          musicGain.gain.value = 0;
+        }
+      } else {
+        musicVolume = globalMutePrevMusicVolume!==null ? globalMutePrevMusicVolume : musicVolume;
+        uiVolume = globalMutePrevUiVolume!==null ? globalMutePrevUiVolume : uiVolume;
+        // Respects the existing focus-ducking behaviour (music is silent
+        // while the window is unfocused) instead of forcing it back on
+        // regardless of focus state. Same ramp treatment as muting above,
+        // easing back up instead of snapping straight to full volume.
+        var target = (document.hasFocus() ? musicVolume : 0) * MUSIC_VOLUME_SCALE;
+        if(musicGain && audioCtx){
+          var now2 = audioCtx.currentTime;
+          musicGain.gain.cancelScheduledValues(now2);
+          musicGain.gain.setValueAtTime(musicGain.gain.value, now2);
+          musicGain.gain.linearRampToValueAtTime(target, now2 + 0.08);
+        } else if(musicGain) {
+          musicGain.gain.value = target;
+        }
+      }
+    } catch(err) {
+      console.error('[global-mute] toggle failed:', err);
     }
     return globalMuted;
   };
@@ -3763,6 +3867,20 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
     localStorage.setItem('dbd_musicVolume', v);
   };
   window.getMusicVolume = function(){
+    // While globally muted, musicVolume itself is temporarily driven to
+    // 0 (see toggleGlobalMute) -- reporting that here would make the
+    // Options slider look like the person's actual saved preference got
+    // reset to 0, when it's really just muted for the moment. Reading
+    // straight from the SAME localStorage key setMusicVolume itself
+    // writes to (rather than the in-memory globalMutePrevMusicVolume)
+    // is deliberately the more bulletproof fix here: that key is
+    // untouched by any of the mute code and has worked reliably this
+    // whole time, so this doesn't depend on the mute state-tracking
+    // being exactly right.
+    if(globalMuted){
+      var saved = localStorage.getItem('dbd_musicVolume');
+      if(saved!==null) return parseInt(saved,10);
+    }
     return Math.round(musicVolume*100);
   };
   window.setSfxVolume = function(v){
@@ -3770,6 +3888,10 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
     localStorage.setItem('dbd_sfxVolume', v);
   };
   window.getSfxVolume = function(){
+    if(globalMuted){
+      var saved = localStorage.getItem('dbd_sfxVolume');
+      if(saved!==null) return parseInt(saved,10);
+    }
     return Math.round(uiVolume*100);
   };
   window.setSharedBrightness = function(v){
