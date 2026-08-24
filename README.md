@@ -17,20 +17,20 @@ It isn't digitally signed, so Windows may show a SmartScreen warning ("Windows p
 - 1v1 Timer with a scoreboard overlay, always on top of the game, editable in-game
 - Map overlay with clock callouts (from [Hens' Callouts](https://hens333.com/callouts), used with permission), with a Detect Map hotkey that reads the map name straight off the loading screen via OCR instead of picking it manually from the list
 - Moonwalk trainer and vault/pallet timing trainer, both with a persistent best-streak record
-- Keyboard, mouse (M1), and Xbox controller (XInput) hotkeys, all freely rebindable
+- Keyboard (any key — letters, numbers, F-keys, arrows, and more), mouse (M1), and Xbox controller (XInput) hotkeys, all freely rebindable
 - Fully customizable overlay colors, position, size, and opacity
 - One-click global mute button for music and every UI sound effect, without losing your saved volume settings
 
 ## A note on the Shift / M1 hotkeys
 
-As an optional feature, off by default, the app can start the timer by pressing Shift or the left mouse button (M1), in addition to the regular F1-F12 keys. To do this, while that option is enabled, the app listens system-wide for those specific key presses — a technique in the same general category as programs like AutoHotkey, which has been reported as detected in some games with anti-cheat systems (including, in some contexts, EasyAntiCheat).
+As an optional feature, off by default, the app can start the timer by pressing Shift or the left mouse button (M1), in addition to any other key you've bound. To do this, while that option is enabled, the app listens system-wide for those specific key presses — a technique in the same general category as programs like AutoHotkey, which has been reported as detected in some games with anti-cheat systems (including, in some contexts, EasyAntiCheat).
 
 Another popular Dead by Daylight tool with a similar feature (starting a 1v1 timer with Shift), "DBD 1v1 Timer," has publicly stated it uses the same category of technique — confirming this isn't an isolated approach among tools like this, though that's still not a safety guarantee either way.
 
 Important points:
 
 - This only applies to people who explicitly enable the "Enable a dedicated Crouch/M1 key" option and bind Shift or M1 to an action. If you never enable it, that part of the code never runs on your PC at all.
-- Using only the regular hotkeys (F-keys, freely rebindable) and the controller, this category of risk doesn't apply: those work through a different mechanism entirely (standard system shortcuts, or periodic polling of the controller's state via XInput, the same API games themselves use).
+- Using only the regular hotkeys (any key you bind, freely rebindable) and the controller, this category of risk doesn't apply: those work through a different mechanism entirely (standard system shortcuts, or periodic polling of the controller's state via XInput, the same API games themselves use).
 - The actual risk can't be quantified with certainty — it may well be low in practice, but it can't be ruled out entirely either.
 
 Disclaimer: this software is provided "as is," with no warranty of any kind. Using the Shift/M1 feature is a voluntary choice made by whoever enables it. The author accepts no responsibility for any action (bans, suspensions, or otherwise) taken by the game's anti-cheat or developer against anyone using this or any other part of the app.
