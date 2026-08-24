@@ -1,7 +1,7 @@
 {
   "name": "dbd-surv-trainer",
   "productName": "DBD Surv Trainer",
-  "version": "0.4.7",
+  "version": "0.5.0",
   "description": "Survivor training tools and in-game overlays for Dead by Daylight.",
   "author": "KovaXtreme",
   "main": "main.js",
