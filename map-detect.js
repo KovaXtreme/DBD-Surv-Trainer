@@ -12,8 +12,6 @@
 // find new ones from a saved screenshot.
 // ---------------------------------------------------------------------
 
-const { nativeImage } = require('electron');
-
 // Percentages of (width, height), measured from the reference screenshot:
 // the actual text sat at roughly x:36-63%, y:81-86%; this is padded wider
 // (25-75%) to comfortably fit a "little wider" stretched-resolution render
@@ -29,21 +27,38 @@ const DEFAULT_REGION = { left: 0.25, right: 0.75, top: 0.78, bottom: 0.88 };
 // matching is case-insensitive), the right side must exactly match a
 // `name` value the app already generates (see prettyMapName in
 // renderer/index.html) so it can look up the right map file.
+//
+// Numbered map variants (Badham Preschool 2-5, Ormond II/III, etc.) are
+// matched separately by matchNumeralVariant() below -- a plain alias per
+// Roman numeral isn't reliable enough on its own, since OCR frequently
+// misreads "II"/"III" as "11"/"111". BHVR retired all numbered map
+// variants from normal 1v4/2v8 matchmaking in an April 2025 update, so
+// this path mostly matters for Custom Games now, where the old variants
+// (Badham I-V, Ormond I-III, and the rest) are still selectable.
 const OFFICIAL_NAME_ALIASES = {
   'raccoon city police station east wing': 'RPD East Wing',
   'raccoon city police station west wing': 'RPD West Wing',
   'raccoon city police station - east wing': 'RPD East Wing',
   'raccoon city police station - west wing': 'RPD West Wing'
-  // Badham Preschool's 5 layouts are handled separately, by
-  // matchNumeralVariant() below -- a plain alias per Roman
-  // numeral isn't enough there since OCR commonly misreads "II"/"III" as
-  // the digits "11"/"111" (near-identical in most fonts), so that needs
-  // its own dedicated handling of multiple possible readings per variant
-  // rather than one fixed literal string.
+};
+
+// Some fonts/OCR training data produce composed Unicode Roman-numeral
+// glyphs (U+2160-U+2169, e.g. the single character "III") instead of
+// separate ASCII letters ("I","I","I") -- visually identical on screen,
+// but the strip-non-alphanumeric step below would otherwise silently
+// delete the whole character, since it isn't a-z0-9. Mapping these to
+// their ASCII letter equivalents first means they get treated exactly
+// like a normal typed "III" from here on, for matchNumeralVariant below.
+var ROMAN_NUMERAL_GLYPHS = {
+  '\u2160': 'I', '\u2161': 'II', '\u2162': 'III', '\u2163': 'IV', '\u2164': 'V',
+  '\u2170': 'i', '\u2171': 'ii', '\u2172': 'iii', '\u2173': 'iv', '\u2174': 'v'
 };
 
 function normalize(s) {
-  return (s || '')
+  var withAsciiNumerals = (s || '').replace(/[\u2160-\u2174]/g, function (ch) {
+    return ROMAN_NUMERAL_GLYPHS[ch] || ch;
+  });
+  return withAsciiNumerals
     .toLowerCase()
     .replace(/[''`]/g, '')
     .replace(/[^a-z0-9]+/g, ' ')
@@ -52,59 +67,60 @@ function normalize(s) {
 }
 
 // OCR frequently misreads Roman numerals as similar-looking digit
-// sequences -- "II" (two capital I's) and "11" (two digit ones) are
-// near-identical in most fonts, same for "III" vs "111". This affects
-// EVERY multi-version map, not just Badham Preschool: Ormond II/III, Coal
-// Tower II, Groaning Storehouse II, Ironworks Of Misery II, Sanctum of
-// Wrath II, Shelter Woods II, Suffocation Pit II, and Family Residence II
-// all end in a Roman numeral too. A plain literal alias for "ii"/"iii"
-// alone isn't reliable enough on its own, so this instead: strips
-// whatever trailing numeral-like suffix (Roman, or its digit-doubled OCR
-// misread) is on the OCR text, converts it to a variant number, then
-// looks for a map whose OWN name -- after the exact same trailing-numeral
-// stripping -- matches the same base words AND variant number. That last
-// part is what makes this work for Badham (whose app-internal names use
-// Arabic digits already, e.g. "Badham Preschool 2") as well as maps like
-// Ormond (whose app-internal names use the Roman numeral directly, e.g.
-// "Ormond II") with the same code path.
+// sequences -- "II" and "11" are near-identical in most fonts, same for
+// "III" vs "111". Strips whatever trailing numeral-like suffix (Roman,
+// or its digit-doubled/mixed OCR misread) is on the text, converts it to
+// a variant number, then looks for a map whose OWN name -- after the
+// exact same trailing-numeral stripping -- matches the same base words
+// AND variant number. That last part is what makes this work for Badham
+// (whose app-internal names use Arabic digits, e.g. "Badham Preschool
+// 2") as well as maps like Ormond (whose app-internal names use the
+// Roman numeral directly, e.g. "Ormond II") with the same code path.
 //
-// Deliberately only multi-character entries here (length 2+): a bare
-// single character or digit ("i", "1", "2", "v"...) as the trailing word
-// is exactly the kind of thing stray OCR noise produces on a map that has
-// NO number in-game at all -- a smudge or a misread letter landing as an
-// isolated "1" or "2" at the end of the recognized text. That was
-// confirmed the hard way: maps with no numbered variant were sometimes
-// landing on version 2 or 3 instead of correctly falling through to the
-// no-suffix default, purely because of one stray character. Real DBD
-// Roman numerals in OCR text (or their doubled-digit misread) are always
-// at least two characters, so requiring that length is a strong, cheap
-// filter against exactly this kind of noise.
+// Scans ALL words for a recognized numeral token, not just the last one
+// -- OCR output sometimes has extra garbage tacked onto the real text
+// with no line break in between, so the numeral can end up buried
+// mid-line rather than at the very end.
 var NUMERAL_SUFFIX_TO_VARIANT = {
   'ii': 2, '11': 2,
   'iii': 3, '111': 3,
-  'iv': 4, '1111': 4
+  'iv': 4, '1111': 4, '1v': 4,
+  'v': 5
 };
+var SINGLE_DIGIT_SUFFIX_TO_VARIANT = { '1': 1, '2': 2, '3': 3, '4': 4, '5': 5 };
 
 // Returns { base: 'ormond', variant: 2 } for "ormond ii" / "ormond 11" /
 // "ormond 2", or { base: 'ormond', variant: 1 } (implicit "no suffix means
 // the first/base version") for plain "ormond". Null if the string is
-// empty.
-function splitNumeralSuffix(normText) {
+// empty. allowSingleDigit: pass true only when parsing this app's own
+// known map names (e.g. "Badham Preschool 3", a fixed string this app
+// itself generates) -- never for OCR text, where a bare single digit is
+// exactly the kind of thing stray OCR noise produces on a map that has
+// no number at all.
+function splitNumeralSuffix(normText, allowSingleDigit) {
   if (!normText) return null;
   var words = normText.split(' ');
-  var last = words[words.length - 1];
-  if (words.length > 1 && NUMERAL_SUFFIX_TO_VARIANT.hasOwnProperty(last)) {
-    return { base: words.slice(0, -1).join(' '), variant: NUMERAL_SUFFIX_TO_VARIANT[last] };
+  for (var i = 1; i < words.length; i++) {
+    var w = words[i];
+    if (NUMERAL_SUFFIX_TO_VARIANT.hasOwnProperty(w)) {
+      return { base: words.slice(0, i).join(' '), variant: NUMERAL_SUFFIX_TO_VARIANT[w] };
+    }
+    if (allowSingleDigit && SINGLE_DIGIT_SUFFIX_TO_VARIANT.hasOwnProperty(w)) {
+      return { base: words.slice(0, i).join(' '), variant: SINGLE_DIGIT_SUFFIX_TO_VARIANT[w] };
+    }
   }
   return { base: normText, variant: 1 };
 }
 
+// Returns the matched { name, file } map object, or null.
 function matchNumeralVariant(normText, mapNames) {
-  var target = splitNumeralSuffix(normText);
+  var target = splitNumeralSuffix(normText, false);
   if (!target) return null;
   for (var i = 0; i < mapNames.length; i++) {
-    var candidate = splitNumeralSuffix(normalize(mapNames[i].name));
-    if (candidate.base === target.base && candidate.variant === target.variant) return mapNames[i];
+    var candidate = splitNumeralSuffix(normalize(mapNames[i].name), true);
+    if (candidate.base === target.base && candidate.variant === target.variant) {
+      return mapNames[i];
+    }
   }
   return null;
 }
@@ -125,17 +141,30 @@ function wordOverlapScore(a, b) {
 // mapNames: array of { name, file } as already computed by the renderer
 // (window.MAP_DATA) -- passed in per-call rather than duplicated here, so
 // this file never has to be kept in sync with the map list by hand.
+// Returns the matched { name, file } map object, or null.
 function matchMapName(ocrText, mapNames) {
   if (!ocrText) return null;
 
+  // Build a candidate list from EVERY OCR'd line, not just the first.
+  // PSM 6 (see getOcrWorker) reads the busy in-game background behind
+  // the map name as extra spurious text lines just as often as it
+  // correctly reads the real map name -- confirmed live: a crop with
+  // "MOUNT ORMOND RESORT" clearly on screen came back with that text
+  // buried several lines down in the OCR output, behind lines of
+  // garbage read from grass/pipes above it. Only ever checking line[0]
+  // meant the real line was never even looked at.
   // The lobby screen shows "REALM - MAP NAME" (or just the map name for
-  // maps whose realm and map share a name). Try the part after the last
-  // " - " first, since that's the more specific/reliable part; fall back
-  // to the whole line if there's no dash.
-  var firstLine = ocrText.split('\n').map(function (l) { return l.trim(); }).filter(Boolean)[0] || '';
-  var afterDash = firstLine.includes(' - ') ? firstLine.split(' - ').slice(1).join(' - ') : firstLine;
-
-  var candidates = [afterDash, firstLine];
+  // maps whose realm and map share a name), so for each line also try
+  // the part after the last " - ", since that's the more specific/
+  // reliable part when present.
+  var lines = ocrText.split('\n').map(function (l) { return l.trim(); }).filter(Boolean);
+  var candidates = [];
+  lines.forEach(function (line) {
+    candidates.push(line);
+    if (line.includes(' - ')) {
+      candidates.push(line.split(' - ').slice(1).join(' - '));
+    }
+  });
 
   for (var c = 0; c < candidates.length; c++) {
     var norm = normalize(candidates[c]);
@@ -156,7 +185,10 @@ function matchMapName(ocrText, mapNames) {
 
   // Fuzzy fallback: best word-overlap score against either candidate,
   // only accepted above a fairly high bar to avoid confident-looking
-  // wrong guesses.
+  // wrong guesses -- a human pressing the manual Detect key while
+  // actually looking at the loading screen is a safe enough situation
+  // for this tolerance to apply to (it exists to survive minor OCR
+  // noise, a dropped word or a misread letter here or there).
   var best = null, bestScore = 0;
   candidates.forEach(function (cand) {
     if (!cand) return;
@@ -178,11 +210,55 @@ function cropToRegion(fullImage, region) {
   return fullImage.crop({ x: x, y: y, width: w, height: h });
 }
 
+// Cheap pre-check to skip OCR entirely on a near-black/near-flat crop --
+// e.g. the black transition frame DBD shows between the lobby and the
+// map name actually appearing. Real on-screen text has real contrast
+// (light text on a darker background, or vice versa); a blank/near-
+// uniform frame has almost none. Sampling a subset of pixels for
+// brightness variance is orders of magnitude cheaper than actually
+// running OCR on it, and skipping those frames matters doubly here: it
+// was confirmed (via the debug crop preview) that Tesseract can spend a
+// surprisingly long time "hallucinating" a wall of garbage text out of
+// pure noise on a blank frame, which was itself eating into the ~5s
+// window where the real map name is on screen.
+function isLikelyBlankImage(image) {
+  var bitmap = image.toBitmap(); // BGRA
+  var len = bitmap.length;
+  if (!len) return true;
+  var targetSamples = 2000;
+  var step = Math.max(4, Math.floor(len / 4 / targetSamples) * 4);
+  var sum = 0, sumSq = 0, count = 0;
+  for (var i = 0; i + 2 < len; i += step) {
+    var lum = (bitmap[i] + bitmap[i + 1] + bitmap[i + 2]) / 3;
+    sum += lum;
+    sumSq += lum * lum;
+    count++;
+  }
+  if (!count) return true;
+  var mean = sum / count;
+  var variance = (sumSq / count) - (mean * mean);
+  var stddev = Math.sqrt(Math.max(0, variance));
+  return stddev < 8;
+}
+
 let ocrWorkerPromise = null;
 function getOcrWorker() {
   if (!ocrWorkerPromise) {
     var Tesseract = require('tesseract.js');
-    ocrWorkerPromise = Tesseract.createWorker('eng');
+    ocrWorkerPromise = Tesseract.createWorker('eng').then(async function (worker) {
+      // PSM 6 = "Assume a single uniform block of text". Tesseract's
+      // default page-segmentation mode analyzes the crop like a
+      // full document layout, which was visibly struggling against the
+      // busy photo-realistic background behind the map name (wood
+      // grain, snow texture) -- confirmed live: a crop where "ORMOND"
+      // was perfectly legible to the eye still came back as "ORNIOND"
+      // from OCR. The map name + subtitle is just two short lines of
+      // plain text, so telling Tesseract to expect exactly that (rather
+      // than segmenting the whole scene into columns/blocks first)
+      // should read it far more cleanly.
+      await worker.setParameters({ tessedit_pageseg_mode: '6' });
+      return worker;
+    });
   }
   return ocrWorkerPromise;
 }
@@ -197,6 +273,11 @@ function getOcrWorker() {
 // region without needing to come back here for more screenshots.
 async function detectMapFromImage(fullImage, mapNames, region) {
   var cropped = cropToRegion(fullImage, region);
+
+  if (isLikelyBlankImage(cropped)) {
+    return { match: null, rawText: '', croppedDataUrl: cropped.toDataURL() };
+  }
+
   // Upscale before OCR: this text is small (roughly 35-40px tall at
   // 1080p) and Tesseract reads small UI text more reliably enlarged.
   var size = cropped.getSize();
@@ -206,10 +287,10 @@ async function detectMapFromImage(fullImage, mapNames, region) {
   var result = await worker.recognize(upscaled.toPNG());
   var rawText = (result && result.data && result.data.text || '').trim();
 
-  var match = matchMapName(rawText, mapNames);
+  var matched = matchMapName(rawText, mapNames);
 
   return {
-    match: match,
+    match: matched,
     rawText: rawText,
     croppedDataUrl: cropped.toDataURL()
   };
