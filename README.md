@@ -1,6 +1,10 @@
 # DBD Surv Trainer
 
-⬇️ [Click here to download the latest version](https://github.com/KovaXtreme/DBD-Surv-Trainer/releases/latest)
+<p align="center">
+  <a href="https://github.com/KovaXtreme/DBD-Surv-Trainer/releases/latest">
+    <img alt="Download DBD Surv Trainer" src="https://img.shields.io/badge/⬇️_DOWNLOAD_NOW-d9564f?style=for-the-badge&logoColor=white">
+  </a>
+</p>
 
 Unofficial desktop tool for Dead by Daylight survivor training — 1v1 timer with an in-game overlay, clock callouts for maps, a moonwalk trainer, a vault/pallet timing trainer, and more.
 
@@ -8,18 +12,18 @@ Not affiliated with, endorsed by, or connected to Behaviour Interactive in any w
 
 ## Download
 
-Grab the latest version from the [Releases](https://github.com/KovaXtreme/DBD-Surv-Trainer/releases) page of this repository — download `DBD Surv Trainer Setup X.X.X.exe` and install it like any other Windows program.
+Click the button above, or grab the latest version directly from the [Releases](https://github.com/KovaXtreme/DBD-Surv-Trainer/releases) page — download `DBD Surv Trainer Setup X.X.X.exe` and install it like any other Windows program.
 
 It isn't digitally signed, so Windows may show a SmartScreen warning ("Windows protected your PC") the first time you run the installer: click "More info" then "Run anyway".
 
 ## What it does
 
-- 1v1 Timer with a scoreboard overlay, always on top of the game, editable in-game
-- Map overlay with clock callouts (from [Hens' Callouts](https://hens333.com/callouts), used with permission), with a Detect Map hotkey that reads the map name straight off the loading screen via OCR instead of picking it manually from the list
-- Moonwalk trainer and vault/pallet timing trainer, both with a persistent best-streak record
+- **1v1 Timer** with a scoreboard overlay, always on top of the game, editable in-game — names, score, and timer layout (side-by-side or stacked) all adjustable without leaving the match
+- **Map overlay** with clock callouts (from [Hens' Callouts](https://hens333.com/callouts), used with permission), with a Detect Map hotkey that reads the map name via OCR instead of picking it manually from a list, plus a curated color palette to recolor the map itself and/or its outline
+- **Moonwalk trainer** and **vault/pallet timing trainer**, both with a persistent best-streak record and instant visual feedback showing exactly where your timing was off
 - Keyboard (any key — letters, numbers, F-keys, arrows, and more), mouse (M1), and Xbox controller (XInput) hotkeys, all freely rebindable
-- Fully customizable overlay colors, position, size, and opacity
-- One-click global mute button for music and every UI sound effect, without losing your saved volume settings
+- Fully customizable overlay colors (flat, metallic, or neon palettes), position, size, and opacity
+- One-click global mute for music and every UI sound effect — remembered across restarts, without losing your saved volume settings
 
 ## A note on the Shift / M1 hotkeys
 
