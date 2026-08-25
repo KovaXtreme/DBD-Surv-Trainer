@@ -4258,9 +4258,13 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
     fvFeedback.className='feedback bad';
     fvPickDirection();
     fvResetBall();
-    fvKeySpace.classList.add('pulsing');
 
     if(fvLoopActive){
+      // Deliberately NOT re-enabling the idle pulse here -- same fix as
+      // Moonwalk's stopOnMiss(): a miss mid-session just triggers an
+      // auto-restart (see below), it isn't the session actually ending.
+      // The pulse should stay off for the whole Start-to-Stop stretch,
+      // only coming back once fvStopLoop() (a real Stop) actually runs.
       fvFeedback.textContent=reason+' Restarting...';
       fvStartBtn.disabled=false;
       fvStartBtn.textContent='Stop';
@@ -4269,6 +4273,7 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
         if(fvLoopActive) fvStartAttempt(true);
       }, 900);
     } else {
+      fvKeySpace.classList.add('pulsing');
       fvFeedback.textContent=reason;
       fvStartBtn.disabled=false;
       fvStartBtn.textContent='Start Trainer';
@@ -4401,6 +4406,13 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
     if(fvCounting || fvRunning) return;
     ensureAudio();
     fvCounting=true;
+    // Stopped right here, at the very top -- matches Moonwalk's own
+    // startAttempt(), which turns its pulse off the instant Start is
+    // clicked, not only once the 3-2-1 countdown finishes. This was
+    // previously only happening inside fvBeginSession() (after the
+    // countdown), so the Space key kept visibly pulsing through the
+    // whole 3-2-1 here even though the equivalent screen didn't.
+    fvKeySpace.classList.remove('pulsing');
     fvStartBtn.disabled=false;
     fvStartBtn.textContent='Stop';
     if(!keepFeedback){
