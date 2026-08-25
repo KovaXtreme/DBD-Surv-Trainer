@@ -1,10 +1,6 @@
 # DBD Surv Trainer
 
-<p align="center">
-  <a href="https://github.com/KovaXtreme/DBD-Surv-Trainer/releases/latest">
-    <img alt="Download DBD Surv Trainer" src="https://img.shields.io/badge/⬇️_DOWNLOAD_NOW-d9564f?style=for-the-badge&logoColor=white">
-  </a>
-</p>
+⬇️ **[Click here to download the latest version](https://github.com/KovaXtreme/DBD-Surv-Trainer/releases/latest)**
 
 Unofficial desktop tool for Dead by Daylight survivor training — 1v1 timer with an in-game overlay, clock callouts for maps, a moonwalk trainer, a vault/pallet timing trainer, and more.
 
@@ -12,7 +8,7 @@ Not affiliated with, endorsed by, or connected to Behaviour Interactive in any w
 
 ## Download
 
-Click the button above, or grab the latest version directly from the [Releases](https://github.com/KovaXtreme/DBD-Surv-Trainer/releases) page — download `DBD Surv Trainer Setup X.X.X.exe` and install it like any other Windows program.
+Click the link above, or grab the latest version directly from the [Releases](https://github.com/KovaXtreme/DBD-Surv-Trainer/releases) page — download `DBD Surv Trainer Setup X.X.X.exe` and install it like any other Windows program.
 
 It isn't digitally signed, so Windows may show a SmartScreen warning ("Windows protected your PC") the first time you run the installer: click "More info" then "Run anyway".
 
