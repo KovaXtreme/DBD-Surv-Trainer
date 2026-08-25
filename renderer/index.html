@@ -1458,6 +1458,22 @@
   }
   .ov-swatch.selected { border-color: #f2e6de; box-shadow: 0 0 12px rgba(255,255,255,0.35); }
   .ov-swatch-disabled { cursor: not-allowed; }
+  /* Marks a swatch as one of the 13 curated colors that actually come
+     out distinct on the map (see MAP_FILL_USABLE_HEX) -- border AND
+     glow both scoped strictly to when Map color is the active target
+     (tracked via a class on the swatches container itself, see
+     buildMapColorSwatches), since that's the one context where "this
+     is one of the good ones" is actually decision-relevant -- on
+     Outline every color already works, so highlighting any of them
+     there would just be visual noise with no real signal. */
+  .mapcolor-target-mapFill .ov-swatch.map-fill-usable {
+    border-color: #7fe8bd;
+    box-shadow: 0 0 10px rgba(127,232,189,0.65), 0 0 4px rgba(127,232,189,0.8);
+  }
+  .mapcolor-target-mapFill .ov-swatch.map-fill-usable.selected {
+    border-color: #7fe8bd;
+    box-shadow: 0 0 14px rgba(127,232,189,0.8), 0 0 6px rgba(127,232,189,0.9);
+  }
   /* Separates the metallic swatch row from the flat-color one above it --
      a plain horizontal rule plus a small label, nothing fancier needed
      since the swatches themselves already make the two rows visually
@@ -2902,13 +2918,6 @@
       </div>
       <span class="ayrun-cam-value" id="ovOpacityValue">100%</span>
     </div>
-    <div class="bpm-row">
-      <label>Brightness</label>
-      <div class="slider-marks-wrap">
-        <input type="range" min="0" max="100" step="1" value="50" id="ovBrightness">
-      </div>
-      <span class="ayrun-cam-value" id="ovBrightnessValue">50%</span>
-    </div>
     <div class="ov-swatch-divider"></div>
     <div class="ov-switch-row">
       <div class="ov-switch-label">Auto-score winner</div>
@@ -2968,6 +2977,13 @@
   </div>
 
   <div class="ov-panel">
+    <div class="ov-panel-title">Map Colors</div>
+    <div class="ov-targets" id="mapColorTargets"></div>
+    <div class="ov-swatches" id="mapColorSwatches"></div>
+    <div class="ov-hint">Pick what you want to color, then choose a color below. Numbers, callout text, and the M/S markers always stay white/black regardless of what you pick here.</div>
+  </div>
+
+  <div class="ov-panel">
     <div class="ov-panel-title">Overlay Settings</div>
     <div class="bpm-row">
       <label>Size</label>
@@ -2978,11 +2994,6 @@
       <label>Opacity</label>
       <div class="slider-marks-wrap"><input type="range" min="20" max="100" step="1" value="100" id="mapOpacity"></div>
       <span class="ayrun-cam-value" id="mapOpacityValue">90%</span>
-    </div>
-    <div class="bpm-row">
-      <label>Brightness</label>
-      <div class="slider-marks-wrap"><input type="range" min="0" max="100" step="1" value="100" id="mapOvBrightness"></div>
-      <span class="ayrun-cam-value" id="mapOvBrightnessValue">100%</span>
     </div>
     <div class="ov-swatch-divider"></div>
     <div class="ov-switch-row">
@@ -4699,8 +4710,6 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
   var ovScaleValue=document.getElementById('ovScaleValue');
   var ovOpacity=document.getElementById('ovOpacity');
   var ovOpacityValue=document.getElementById('ovOpacityValue');
-  var ovBrightness=document.getElementById('ovBrightness');
-  var ovBrightnessValue=document.getElementById('ovBrightnessValue');
   // Position is no longer slider-driven -- these two plain numbers (not
   // input elements) hold the current percentage position, updated live
   // by dragging (see the positioning-mode code further down) instead.
@@ -5603,8 +5612,12 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
   function applyOvOpacity(){
     ovBar.style.opacity = parseInt(ovOpacity.value,10)/100;
   }
+  // Brightness slider removed -- kept as a no-op so the existing call
+  // sites elsewhere (restore, cross-window sync) don't need to be
+  // hunted down individually; the overlay just always renders at its
+  // natural brightness now, no adjustable dimming.
   function applyOvBrightness(){
-    ovBar.style.filter = 'brightness(' + brightnessFactor(parseInt(ovBrightness.value,10)).toFixed(3) + ')';
+    ovBar.style.filter = '';
   }
   ovScale.addEventListener('input', function(){
     ovScaleValue.textContent=ovScale.value+'%';
@@ -5615,11 +5628,6 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
     ovOpacityValue.textContent=ovOpacity.value+'%';
     applyOvOpacity();
     localStorage.setItem('dbd_ovOpacity', ovOpacity.value);
-  });
-  ovBrightness.addEventListener('input', function(){
-    ovBrightnessValue.textContent=ovBrightness.value+'%';
-    applyOvBrightness();
-    localStorage.setItem('dbd_ovBrightness', ovBrightness.value);
   });
 
   function setOvPosPercent(x, y, save){
@@ -5921,7 +5929,6 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
     var saved = {
       ovScale: localStorage.getItem('dbd_ovScale'),
       ovOpacity: localStorage.getItem('dbd_ovOpacity'),
-      ovBrightness: localStorage.getItem('dbd_ovBrightness'),
       ovPosX: localStorage.getItem('dbd_ovPosX'),
       ovPosY: localStorage.getItem('dbd_ovPosY'),
       ovAutoScore: localStorage.getItem('dbd_ovAutoScore'),
@@ -5932,7 +5939,6 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
     };
     if(saved.ovScale!==null){ ovScale.value=saved.ovScale; ovScaleValue.textContent=saved.ovScale+'%'; }
     if(saved.ovOpacity!==null){ ovOpacity.value=saved.ovOpacity; ovOpacityValue.textContent=saved.ovOpacity+'%'; }
-    if(saved.ovBrightness!==null){ ovBrightness.value=saved.ovBrightness; ovBrightnessValue.textContent=saved.ovBrightness+'%'; }
     if(saved.ovPosX!==null) ovPosXPercent = parseFloat(saved.ovPosX);
     if(saved.ovPosY!==null) ovPosYPercent = parseFloat(saved.ovPosY);
     if(saved.ovAutoScore!==null){ ovAutoScoreEnabled = saved.ovAutoScore==='1'; ovAutoScoreSwitch.classList.toggle('on', ovAutoScoreEnabled); }
@@ -6967,9 +6973,213 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
   var mapPosLocked = true;
   var mapOpacity = document.getElementById('mapOpacity');
   var mapOpacityValue = document.getElementById('mapOpacityValue');
-  var mapOvBrightness = document.getElementById('mapOvBrightness');
-  var mapOvBrightnessValue = document.getElementById('mapOvBrightnessValue');
+  // mapOvBrightness/mapOvBrightnessValue removed along with the slider
+  // itself -- no longer declared here (previously pointed at a slider
+  // that no longer exists in the HTML, which left every reference below
+  // reading/writing null and throwing).
   var mapHkGrid = document.getElementById('mapHkGrid');
+
+  // ----- Map Colors (mirrors the 1v1 Colors panel: same target-picker /
+  // swatch pattern, same OV_COLORS palette, same isNeon/neonBaseHex/
+  // neonizeHex/resolveGlowColor helpers) but with just two targets
+  // instead of ten, no Metallic row (only asked for flat + Neon here),
+  // and its own separate storage key so it's fully independent of the
+  // timer's own color choices. -----
+  var MAP_COLOR_TARGETS = [
+    { id:'mapFill', label:'Map color', def:'transparent' },
+    { id:'outline', label:'Outline',   def:'transparent' }
+  ];
+  var mapColors = {};
+  try { var storedMapCols = JSON.parse(localStorage.getItem('dbd_mapColors') || '{}'); }
+  catch(err){ storedMapCols = {}; }
+  MAP_COLOR_TARGETS.forEach(function(t){
+    mapColors[t.id] = storedMapCols.hasOwnProperty(t.id) ? storedMapCols[t.id] : t.def;
+  });
+  var mapActiveColorTarget = 'mapFill';
+  var mapColorTargetsEl = document.getElementById('mapColorTargets');
+  var mapColorSwatchesEl = document.getElementById('mapColorSwatches');
+
+  // Reference hue of the source map artwork's own fill color -- measured
+  // directly from the actual images (a light violet, ~234 degrees on the
+  // HSL wheel). Map color recoloring works by rotating every pixel's hue
+  // by a fixed offset from this reference point; white/black pixels (the
+  // clock numbers, callout text, the M/S markers) have no hue at all, so
+  // hue-rotate leaves them completely untouched -- that's what keeps
+  // them white/black regardless of what's picked here, not a separate
+  // masking step.
+  var MAP_ART_BASE_HUE = 234;
+  function hexToHueDeg(hex){
+    var r=parseInt(hex.slice(1,3),16)/255, g=parseInt(hex.slice(3,5),16)/255, b=parseInt(hex.slice(5,7),16)/255;
+    var max=Math.max(r,g,b), min=Math.min(r,g,b), delta=max-min, h=0;
+    if(delta!==0){
+      if(max===r) h = 60*(((g-b)/delta)%6);
+      else if(max===g) h = 60*(((b-r)/delta)+2);
+      else h = 60*(((r-g)/delta)+4);
+    }
+    if(h<0) h+=360;
+    return h;
+  }
+  function mapColorSaveColors(){
+    localStorage.setItem('dbd_mapColors', JSON.stringify(mapColors));
+  }
+  // Applies both the map-fill hue shift and the outline glow to the
+  // SAME two <img> elements the size/rotation logic already targets --
+  // the live in-game overlay image (mapOvImg) and the in-app editor
+  // preview (mapPreview), so both stay visually consistent. Deliberately
+  // set on the image itself rather than on mapOvBar (which already
+  // carries the brightness filter and the opacity that both this and
+  // brightness need to respect) -- filters on a child compose with
+  // filters on its ancestor automatically, so brightness (bar) and hue-
+  // rotate/outline (image) both end up applied together correctly, and
+  // both automatically inherit mapOvBar's opacity for free since the
+  // image lives inside it.
+  function applyMapColors(){
+    var filters = [];
+    var fillVal = mapColors.mapFill;
+    if(fillVal && fillVal!=='transparent' && !isNeon(fillVal)){
+      var fillHex = resolveGlowColor(fillVal);
+      var deg = hexToHueDeg(fillHex) - MAP_ART_BASE_HUE;
+      filters.push('hue-rotate(' + deg.toFixed(1) + 'deg)');
+    }
+    var outlineVal = mapColors.outline;
+    if(outlineVal && outlineVal!=='transparent'){
+      var outlineHex = resolveGlowColor(outlineVal);
+      // Eight 1px-offset drop-shadows trace a solid ring that follows
+      // the image's actual alpha silhouette exactly, at whatever size
+      // it's currently rendered at -- correct automatically on resize,
+      // since it's recomputed from the real rendered pixels every frame
+      // rather than a fixed shape that would need hand-traced art for
+      // all 58 maps and would drift out of sync the moment the size
+      // slider moves.
+      [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]].forEach(function(d){
+        filters.push('drop-shadow(' + d[0] + 'px ' + d[1] + 'px 0 ' + outlineHex + ')');
+      });
+      if(isNeon(outlineVal)){
+        filters.push('drop-shadow(0 0 6px ' + outlineHex + ')');
+        filters.push('drop-shadow(0 0 14px ' + outlineHex + ')');
+      }
+    }
+    var filterStr = filters.join(' ');
+    mapOvImg.style.filter = filterStr;
+    mapPreview.style.filter = filterStr;
+  }
+  function buildMapColorTargets(){
+    mapColorTargetsEl.innerHTML='';
+    MAP_COLOR_TARGETS.forEach(function(t){
+      var chip=document.createElement('div');
+      chip.className='ov-target'+(t.id===mapActiveColorTarget?' selected':'');
+      var dot=document.createElement('span');
+      dot.className='ov-target-dot';
+      var dotVal = mapColors[t.id];
+      dot.style.background = dotVal==='transparent' ? 'transparent'
+        : isNeon(dotVal) ? neonBaseHex(dotVal)
+        : dotVal;
+      chip.appendChild(dot);
+      chip.appendChild(document.createTextNode(t.label));
+      chip.addEventListener('click', function(){
+        mapActiveColorTarget=t.id;
+        buildMapColorTargets();
+        buildMapColorSwatches();
+        if(window.playUIHover) window.playUIHover();
+      });
+      mapColorTargetsEl.appendChild(chip);
+    });
+  }
+  // The 13 hex values below are the ONLY flat colors that come out
+  // visually distinct on the map itself -- picked by hand after testing,
+  // since hue-rotate can only ever shift an existing hue, never add one.
+  // The 4 neutrals (white/gray/dark gray/black) have ~0 saturation, so
+  // there's no hue there to rotate at all -- white and black in
+  // particular land on the exact same result, indistinguishable from
+  // each other. The mid/light variant of every hue family, and all
+  // three browns, technically DO rotate to something, but the result
+  // reads as too washed-out/similar to tell apart in practice. Only
+  // affects the Map color target -- every one of these swatches (and
+  // the ones excluded here) still works completely normally for
+  // Outline, which doesn't go through hue-rotate at all.
+  var MAP_FILL_USABLE_HEX = {
+    '#8e0b0b':1, '#8e3b0b':1, '#8e670b':1, '#8e8e0b':1, '#578e0b':1,
+    '#218e0b':1, '#0b8e42':1, '#0b8e74':1, '#0b6b8e':1, '#0b3b8e':1,
+    '#210b8e':1, '#6d0b8e':1, '#8e0b62':1
+  };
+  function buildMapColorSwatches(){
+    mapColorSwatchesEl.innerHTML='';
+    mapColorSwatchesEl.classList.toggle('mapcolor-target-mapFill', mapActiveColorTarget === 'mapFill');
+    var list = ['transparent'].concat(OV_COLORS);
+    function makeMapSwatch(col, displayBg, title, selected, extraShadow, disabled, disabledTitle){
+      var sw=document.createElement('div');
+      sw.className='ov-swatch'+(selected?' selected':'')+(disabled?' ov-swatch-disabled':'');
+      if(MAP_FILL_USABLE_HEX[col]) sw.classList.add('map-fill-usable');
+      if(col==='transparent') sw.classList.add('ov-swatch-none');
+      if(title) sw.title=title;
+      sw.style.background = disabled
+        ? 'linear-gradient(45deg, transparent 45%, rgba(217,86,79,0.9) 45%, rgba(217,86,79,0.9) 55%, transparent 55%), ' + displayBg
+        : displayBg;
+      if(extraShadow) sw.style.boxShadow = extraShadow;
+      if(disabled){
+        sw.title = disabledTitle || "Neon isn't available for Map color -- it can only shift the map's existing hue, it can't add a glow the way it does for Outline.";
+        return sw; // no click handler -- genuinely not selectable, not just visually dimmed
+      }
+      sw.addEventListener('click', function(){
+        mapColors[mapActiveColorTarget]=col;
+        mapColorSaveColors();
+        buildMapColorTargets();
+        buildMapColorSwatches();
+        applyMapColors();
+        if(window.playUIHover) window.playUIHover();
+      });
+      return sw;
+    }
+    var current = mapColors[mapActiveColorTarget];
+    list.forEach(function(col){
+      var displayBg = col==='transparent' ? '' : col;
+      var flatDisabledHere = (mapActiveColorTarget === 'mapFill' && col!=='transparent' && !MAP_FILL_USABLE_HEX[col]);
+      mapColorSwatchesEl.appendChild(makeMapSwatch(col, displayBg, col==='transparent' ? 'No color' : null, col===current, null, flatDisabledHere, "This color doesn't come out distinctly on the map itself (too close to white/black/gray, or too washed out once shifted) -- try one of the enabled colors instead. Still fully available for Outline."));
+    });
+    // Collapsible Neon row -- same pattern as the 1v1 panel's own Neon
+    // row, own separate open/closed storage key.
+    var divider = document.createElement('div');
+    divider.className = 'ov-swatch-divider';
+    mapColorSwatchesEl.appendChild(divider);
+    var headerRow = document.createElement('div');
+    headerRow.className = 'ov-switch-row';
+    headerRow.style.width = '100%';
+    var label = document.createElement('div');
+    label.className = 'ov-switch-label';
+    label.textContent = 'Neon';
+    var toggleSw = document.createElement('div');
+    toggleSw.className = 'ov-switch';
+    headerRow.appendChild(label);
+    headerRow.appendChild(toggleSw);
+    mapColorSwatchesEl.appendChild(headerRow);
+    var neonRow = document.createElement('div');
+    neonRow.className = 'ov-swatches ov-swatch-collapsible';
+    // Only Outline can use Neon -- Map color works by rotating the
+    // artwork's existing hue, which has no concept of "glow" the way
+    // neon text/backgrounds do elsewhere, so it's crossed out (barred,
+    // same red diagonal as the timer's own disabled swatches) rather
+    // than silently doing nothing when picked.
+    var neonDisabledHere = (mapActiveColorTarget === 'mapFill');
+    OV_COLORS.forEach(function(hex){
+      var neonHexVal = neonizeHex(hex);
+      var neonVal = 'neon:' + neonHexVal;
+      neonRow.appendChild(makeMapSwatch(neonVal, neonHexVal, null, neonVal===current, '0 0 3px ' + neonHexVal, neonDisabledHere));
+    });
+    mapColorSwatchesEl.appendChild(neonRow);
+    var expanded = localStorage.getItem('dbd_mapNeonSectionOpen') === '1';
+    toggleSw.classList.toggle('on', expanded);
+    neonRow.classList.toggle('open', expanded);
+    toggleSw.addEventListener('click', function(){
+      expanded = !expanded;
+      localStorage.setItem('dbd_mapNeonSectionOpen', expanded ? '1' : '0');
+      toggleSw.classList.toggle('on', expanded);
+      neonRow.classList.toggle('open', expanded);
+      if(window.playUIHover) window.playUIHover();
+    });
+  }
+  buildMapColorTargets();
+  buildMapColorSwatches();
+  applyMapColors();
 
   var mapCurrent = 0;
   var mapFilter = '';
@@ -7013,6 +7223,7 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
       mapOvImg.removeAttribute('src');
     }
     applyMapRotation();
+    if(typeof applyMapColors === 'function') applyMapColors();
   }
 
   // Draws the small version-switcher dots under the preview, one per
@@ -7165,17 +7376,16 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
     mapOvBar.style.width = (300 * sc) + 'px';
     mapOvBar.style.opacity = (parseInt(mapOpacity.value,10)/100);
   }
+  // Brightness slider removed (same reasoning as the timer's own, see
+  // applyOvBrightness above) -- kept as a no-op so the remaining call
+  // sites (restore, cross-window sync) don't each need to be hunted
+  // down individually; the map overlay just always renders at its
+  // natural brightness now, no adjustable dimming.
   function applyMapOvBrightness(){
-    // For this slider specifically, 100 (not 50) is the neutral/"current"
-    // point -- the whole 0-100 range only darkens, it never brightens past
-    // the map's natural look.
-    var v = parseInt(mapOvBrightness.value,10);
-    var b = 0.35 + 0.65*(v/100);
-    mapOvBar.style.filter = 'brightness(' + b.toFixed(3) + ')';
+    mapOvBar.style.filter = '';
   }
   mapSize.addEventListener('input', function(){ mapSizeValue.textContent=mapSize.value+'%'; applyMapOverlay(); localStorage.setItem('dbd_mapSize', mapSize.value); });
   mapOpacity.addEventListener('input', function(){ mapOpacityValue.textContent=mapOpacity.value+'%'; applyMapOverlay(); localStorage.setItem('dbd_mapOpacity', mapOpacity.value); });
-  mapOvBrightness.addEventListener('input', function(){ mapOvBrightnessValue.textContent=mapOvBrightness.value+'%'; applyMapOvBrightness(); localStorage.setItem('dbd_mapOvBrightness', mapOvBrightness.value); });
 
   // ---------------------------------------------------------------------
   // Drag-to-position for the map overlay, unlocked via the unified
@@ -7302,14 +7512,12 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
       mapPosX: localStorage.getItem('dbd_mapPosX'),
       mapPosY: localStorage.getItem('dbd_mapPosY'),
       mapOpacity: localStorage.getItem('dbd_mapOpacity'),
-      mapOvBrightness: localStorage.getItem('dbd_mapOvBrightness'),
       mapPosLocked: localStorage.getItem('dbd_mapPosLocked')
     };
     if(saved.mapSize!==null){ mapSize.value=saved.mapSize; mapSizeValue.textContent=saved.mapSize+'%'; }
     if(saved.mapPosX!==null) mapPosXPercent = parseFloat(saved.mapPosX);
     if(saved.mapPosY!==null) mapPosYPercent = parseFloat(saved.mapPosY);
     if(saved.mapOpacity!==null){ mapOpacity.value=saved.mapOpacity; mapOpacityValue.textContent=saved.mapOpacity+'%'; }
-    if(saved.mapOvBrightness!==null){ mapOvBrightness.value=saved.mapOvBrightness; mapOvBrightnessValue.textContent=saved.mapOvBrightness+'%'; }
     if(saved.mapPosLocked!==null){ mapPosLocked = saved.mapPosLocked==='1'; }
     // Deliberately not calling the IPC-triggering part of relock here --
     // same reasoning as the timer's own restore block: this runs on
@@ -7866,7 +8074,7 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
           ovColors: ovColors, ovVisible: ovVisible, timerStacked: timerStacked,
           ovEditing: ovEditing,
           ovScale: ovScale.value, ovOpacity: ovOpacity.value,
-          ovBrightness: ovBrightness.value, ovPosX: ovPosXPercent, ovPosY: ovPosYPercent,
+          ovPosX: ovPosXPercent, ovPosY: ovPosYPercent,
           ovPosLocked: ovPosLocked, ovWinnerHighlightEnabled: ovWinnerHighlightEnabled
         };
       }
@@ -7878,7 +8086,8 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
           mapOverlayInteractive: mapOverlayInteractive,
           mapSize: mapSize.value, mapPosX: mapPosXPercent, mapPosY: mapPosYPercent,
           mapPosLocked: mapPosLocked,
-          mapOpacity: mapOpacity.value, mapOvBrightness: mapOvBrightness.value
+          mapOpacity: mapOpacity.value,
+          mapColors: mapColors
         };
       }
       function pushOverlaySync(){
@@ -8080,7 +8289,19 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
           ovColors = payload.ovColors; ovVisible = payload.ovVisible;
           timerStacked = payload.timerStacked;
           ovScale.value = payload.ovScale; ovOpacity.value = payload.ovOpacity;
-          ovBrightness.value = payload.ovBrightness;
+          // ovBrightness reference removed -- that slider's HTML/variable
+          // no longer exist (removed in an earlier pass, see the no-op
+          // applyOvBrightness() above), so this line was throwing a
+          // ReferenceError on every single incoming sync update in the
+          // TIMER overlay window specifically -- which, caught by the
+          // try/catch around this whole handler, silently aborted the
+          // rest of this block EVERY time, including the
+          // ovBar.classList.toggle('show', ovVisible) line just below
+          // that actually makes the bar visible. The main window's own
+          // click handler (toggleOverlay(), which sets .show directly,
+          // no sync round-trip needed) was never affected by this, which
+          // is why the bug only ever showed up in the real overlay
+          // window and not here.
           // Skipped entirely while a drag is actively in progress here
           // (ovDragState set) -- this whole handler fires from a
           // "safety net" sync arriving every 150ms from the main window,
@@ -8113,7 +8334,7 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
           }
           mapSize.value = payload.mapSize;
           mapOpacity.value = payload.mapOpacity;
-          mapOvBrightness.value = payload.mapOvBrightness;
+          if(payload.mapColors) mapColors = payload.mapColors;
           // Skipped while a drag is actively in progress here -- same
           // "150ms safety-net sync fighting a live drag" issue fixed for
           // the timer overlay, and the map overlay shares that exact
@@ -8125,7 +8346,7 @@ var CLICK_SAMPLE_B64='UklGRow1AABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWg1AA
               mapOvBar.classList.toggle('positioning', !mapPosLocked);
             }
           }
-          applyMapOverlay(); applyMapOvBrightness();
+          applyMapOverlay(); applyMapOvBrightness(); applyMapColors();
           renderCurrentMap();
         }
        } catch(err){ console.error('[overlay apply] failed:', err); }
