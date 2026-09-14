@@ -107,6 +107,79 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setOverlayClickThrough: (overlayName, ignore) =>
     ipcRenderer.send('set-overlay-click-through', overlayName, ignore),
 
+  // ----- timer overlay window repositioning -----
+  // The timer overlay is now a small window sized to just the bar
+  // itself (not a full-screen invisible one), so "dragging the bar"
+  // means actually moving that OS window. One-shot fetch of its fixed
+  // size plus the display's bounds, so the renderer can convert a saved
+  // or dragged position into absolute screen coordinates and compute
+  // snap targets without any of that being hardcoded on its side.
+  getTimerOverlayGeometry: () => ipcRenderer.invoke('get-timer-overlay-geometry'),
+  // x/y are the window's target top-left in absolute screen coordinates.
+  moveTimerOverlayWindow: (x, y) => ipcRenderer.send('move-timer-overlay-window', x, y),
+  // width/height in pixels -- resizes the window to fit its content.
+  // centerX/centerY: the window's CURRENT center point, passed through
+  // directly from the renderer's own stable tracked value (ovWinX/Y)
+  // rather than main.js re-deriving it from the window's current native
+  // bounds -- re-deriving it that way was causing a compounding
+  // rounding drift.
+  //
+  // invoke (not send/fire-and-forget) -- returns the ACTUAL center the
+  // window ended up at, which can differ from the requested centerX/Y
+  // whenever main.js had to clamp the position to keep the (now larger)
+  // window fully on-screen. Without this round-trip, the renderer kept
+  // right on believing its own pre-clamp centerX/Y was still accurate
+  // even after main.js silently corrected it -- and since every
+  // SUBSEQUENT resize call used that same stale, now-wrong value as its
+  // own "current center", the error compounded further with each
+  // resize near an edge. This is exactly what showed up as "still
+  // drifts a bit, worse the closer to an edge" even after the
+  // center-based (non-edge-anchored) resize math was already confirmed
+  // correct in isolation -- the math was fine, but the renderer's own
+  // notion of "current center" could silently fall out of sync with
+  // reality. The renderer updates ovWinX/Y from this response every
+  // time (see syncOvWindowSize), so the two stay in agreement even
+  // right after a clamp.
+  // oldWidth/oldHeight: the window's size just BEFORE this resize --
+  // lets main.js detect whether an edge was flush against the display
+  // boundary beforehand (i.e. the overlay was snapped there via the
+  // drag magnet), and if so, keep growing/shrinking away from THAT
+  // edge instead of always symmetrically from the center -- otherwise
+  // an overlay snapped flush to, say, the top of the screen visibly
+  // drifts away from the top every time the size changes, since only
+  // the center point (not the edge the player actually cares about)
+  // was ever being preserved.
+  // dock (last argument): the renderer's own explicit record of which
+  // display edge/corner the overlay is currently snapped to, plus how far
+  // the window's edge should sit from that display edge. main.js uses it
+  // instead of trying to guess from edge proximity -- see
+  // computeDockedCenter there for why guessing was the actual cause of a
+  // snapped overlay drifting off its edge during a Size drag.
+  resizeTimerOverlayWindow: (width, height, centerX, centerY, oldWidth, oldHeight, dock) =>
+    ipcRenderer.invoke('resize-timer-overlay-window', width, height, centerX, centerY, oldWidth, oldHeight, dock),
+  // Same three, mirrored for the map overlay window.
+  getMapOverlayGeometry: () => ipcRenderer.invoke('get-map-overlay-geometry'),
+  moveMapOverlayWindow: (x, y) => ipcRenderer.send('move-map-overlay-window', x, y),
+  // Same reasoning as the timer's own, above.
+  resizeMapOverlayWindow: (width, height, centerX, centerY, oldWidth, oldHeight, dock) =>
+    ipcRenderer.invoke('resize-map-overlay-window', width, height, centerX, centerY, oldWidth, oldHeight, dock),
+
+  // ----- overlay window lifecycle (create/destroy on activate) -----
+  // Called by the MAIN window's own toggle -- creates (or destroys) the
+  // actual overlay window rather than it always existing in the
+  // background, invisible, from app startup.
+  showTimerOverlay: () => ipcRenderer.send('show-timer-overlay'),
+  hideTimerOverlay: () => ipcRenderer.send('hide-timer-overlay'),
+  showMapOverlay: () => ipcRenderer.send('show-map-overlay'),
+  hideMapOverlay: () => ipcRenderer.send('hide-map-overlay'),
+  // Called by the TIMER OVERLAY window's own renderer once it has
+  // finished sizing/positioning itself correctly -- only then does
+  // main.js actually reveal the (until now hidden) window, so there's
+  // no visible snap into place a moment after it first appears.
+  notifyTimerOverlayReady: () => ipcRenderer.send('timer-overlay-ready'),
+  // Same, for the map overlay window.
+  notifyMapOverlayReady: () => ipcRenderer.send('map-overlay-ready'),
+
   // Called by the TIMER OVERLAY window while the user is typing directly
   // on it, to push those live edits back to the main window (the source
   // of truth for name/score/edit-mode state).
