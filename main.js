@@ -590,18 +590,151 @@ function createMainWindow() {
   });
 }
 
+// Fixed size for the TIMER overlay window specifically (see below) --
+// used only as its CREATION-time size, before the renderer measures
+// the bar's real content and resizes it to match (see
+// resize-timer-overlay-window further down) -- calibrated close to
+// what the bar actually measures at 100% scale with default names, so
+// that near-instant correction is a small, barely-visible snap rather
+// than an obviously bigger jump. The map overlay is untouched by any
+// of this -- still a full-display window, still positioned via CSS
+// percentage within it, exactly as before.
+const TIMER_OV_WIN_W = 993;
+const TIMER_OV_WIN_H = 109;
+// Same idea, same margin math (see MAP_WIN_MARGIN_PX in the renderer --
+// 26px, matching the timer's own, since the dashed positioning frame's
+// CSS is identical: 10px outline-offset + 2px outline width = 12px past
+// the edge either way) applied to the map overlay now too -- initial
+// guess based on the map image's own default 300px width at 100% size,
+// square aspect ratio, plus 2*26 margin on each side.
+// Initial creation-size guess, same self-correcting role as
+// TIMER_OV_WIN_W/H above -- updated to match the new MAP_WIN_MARGIN_PX
+// (60px, see the renderer for why) and a rough estimate of the actual
+// card height (the square map image plus its title header bar above
+// it, not just a plain square).
+const MAP_OV_WIN_W = 420;
+const MAP_OV_WIN_H = 500;
+// Mirrors OV_WIN_MARGIN_PX/MAP_WIN_MARGIN_PX in the renderer -- these
+// values MUST stay in sync with those (not derived/shared automatically,
+// since main.js and the renderer are separate files/processes). Used
+// specifically by the resize handlers' clampWindowToDisplay call, to
+// let the window's transparent margin extend this many px past the
+// display edge before actually clamping -- see the long comment on
+// clampWindowToDisplay for why.
+//
+// The timer's margin is now asymmetric per side (0/10/2/2, not one
+// uniform value) -- the window is sized to sit exactly flush against
+// the dashed positioning frame on request ("a filo esatto... estendo
+// esattamente all'esterno"), and the frame itself sits a different
+// distance from the bar on each side (see .ov-bar.positioning::before
+// in the renderer's CSS, and OV_FRAME_OFFSET_TOP/BOTTOM/LEFT/RIGHT
+// there, which these four MUST stay in sync with).
+const TIMER_OV_WIN_MARGIN_TOP = 0;
+const TIMER_OV_WIN_MARGIN_BOTTOM = 10;
+const TIMER_OV_WIN_MARGIN_LEFT = 2;
+const TIMER_OV_WIN_MARGIN_RIGHT = 2;
+const MAP_OV_WIN_MARGIN_PX = 60;
+
 function createOverlayWindow(viewName) {
   const display = screen.getPrimaryDisplay();
+  const isTimer = viewName === 'timer';
+  const isMap = viewName === 'map';
+  // Both overlay windows are now sized to just their own content (plus
+  // margin), not the whole display -- this is what makes them show up
+  // as normal, tightly-cropped, OBS-capturable windows instead of one
+  // invisible full-screen window each. Positioned near each one's own
+  // long-standing default screen location initially (bottom-center for
+  // the timer, upper-right for the map); the renderer corrects this to
+  // the user's actual saved position immediately on load via
+  // moveTimerOverlayWindow/moveMapOverlayWindow, since that's saved in
+  // the renderer's own localStorage, not reachable from here.
+  let winX = display.bounds.x;
+  let winY = display.bounds.y;
+  let winW = display.bounds.width;
+  let winH = display.bounds.height;
+  if (isTimer) {
+    winX = display.bounds.x + Math.round((display.bounds.width - TIMER_OV_WIN_W) / 2);
+    // Flush against the very top of the screen by default (was 74% down,
+    // i.e. the lower third) -- matches the window's own top margin of 0
+    // (see TIMER_OV_WIN_MARGIN_TOP/OV_FRAME_OFFSET_TOP), so the dashed
+    // positioning frame lands with zero gap against the monitor's own
+    // top edge on a fresh install, before the player has ever dragged it
+    // anywhere themselves.
+    winY = display.bounds.y;
+    winW = TIMER_OV_WIN_W;
+    winH = TIMER_OV_WIN_H;
+  } else if (isMap) {
+    // Top-left corner by default (was upper-right at 88%/12%). Uses the
+    // window's own placeholder size here, same caveat as the timer's own
+    // default above -- the renderer corrects this to a precise flush
+    // position (see computeMapSnapTargetsX/Y) once it knows the map's
+    // real rendered size, so this placeholder only needs to be roughly
+    // right, not pixel-exact.
+    winX = display.bounds.x;
+    winY = display.bounds.y;
+    winW = MAP_OV_WIN_W;
+    winH = MAP_OV_WIN_H;
+  }
+  // THE OVERLAY WINDOWS ARE THE SIZE OF THE DISPLAY, AND NEVER CHANGE.
+  //
+  // Every remaining overlay bug traced back to the window changing shape:
+  // an anchored window's POSITION is a function of its size, so resizing
+  // it also moves it, and the OS bounds and the page's own layout
+  // viewport do not update in the same frame -- which is the sideways
+  // flash. Worse, a window that no longer hugs the bar put the drag, the
+  // snap magnet and the anchoring into two different reference frames
+  // (one measured from the bar, one from the window), over 200px apart,
+  // which is what made a grabbed overlay squirt out from under the cursor.
+  //
+  // A window that is always exactly the display has neither problem, and
+  // not by being careful about it: there is no size to change, no
+  // position to recompute, and window coordinates and screen coordinates
+  // differ by a constant. One frame of reference for everything.
+  winX = display.bounds.x;
+  winY = display.bounds.y;
+  winW = display.bounds.width;
+  winH = display.bounds.height;
   const win = new BrowserWindow({
-    x: display.bounds.x,
-    y: display.bounds.y,
-    width: display.bounds.width,
-    height: display.bounds.height,
+    x: winX,
+    y: winY,
+    // Both overlay windows load the same index.html, which only carries
+    // one shared <title> tag ("DBD Surv Trainer") -- with nothing here
+    // to override it, that's the ONLY name OBS's Window Capture picker
+    // (or any other window list) ever saw for either one, making them
+    // indistinguishable in that list. This sets each one's real OS-level
+    // window title directly, independent of when/whether the page's own
+    // title tag loads, so the distinction shows up immediately and
+    // reliably in that picker.
+    title: isTimer ? 'DBD Surv Trainer - 1v1 Timer'
+      : isMap ? 'DBD Surv Trainer - Maps Clocks'
+      : 'DBD Surv Trainer',
+    width: winW,
+    height: winH,
+    // Created hidden on purpose -- shown explicitly once the renderer
+    // has finished sizing/positioning itself correctly (see
+    // 'timer-overlay-ready'/'map-overlay-ready' below), so the very
+    // first thing the player ever sees (or OBS captures) is already the
+    // right size in the right place, not a visible snap into place a
+    // moment later.
+    show: false,
     frame: false,
     transparent: true,
     alwaysOnTop: true,
-    skipTaskbar: true,
+    // skipTaskbar removed on purpose (was true) -- with it set, this
+    // window never showed up in the taskbar at all, which almost
+    // certainly doubled as the reason OBS's Window Capture source list
+    // couldn't find it either (window-picker lists like that typically
+    // enumerate the same "normal, taskbar-visible" windows). Showing it
+    // in the taskbar is a purely window-manager-level visibility change
+    // -- unlike disabling hardware acceleration, it doesn't touch how
+    // anything actually renders, so it doesn't carry that same risk of
+    // breaking the transparency itself.
     resizable: false,
+    // movable stays false for BOTH overlays -- dragging the bar itself
+    // (handled entirely in the renderer/main.js pair below for the
+    // timer) is a deliberate, separate mechanism from the OS's own
+    // native window-drag, which would fight with the click-through /
+    // snap-to-edge logic already in place.
     movable: false,
     fullscreenable: false,
     hasShadow: false,
@@ -612,6 +745,14 @@ function createOverlayWindow(viewName) {
     // land once click-through is turned off for either of them.
     focusable: true,
     backgroundColor: '#00000000',
+    // Windows 11 rounds the corners of frameless windows by default, and
+    // on a TRANSPARENT one the rounding is drawn as a faint hairline that
+    // survives along the straight edges too -- it reads as a stray light
+    // pixel just inside the window's own boundary, and whether it lands
+    // on a whole device pixel or gets split across two depends on the
+    // window's exact size, which is why it would appear at some Size
+    // values and not others. Squared off, there is no rounding to draw.
+    roundedCorners: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -648,6 +789,20 @@ function createOverlayWindow(viewName) {
     search: 'view=' + viewName
   });
 
+  // Electron's default behavior is to resync a window's native title to
+  // match the PAGE's own <title> tag the moment it finishes loading (and
+  // again on any later document.title change) -- which undid the custom
+  // title set above the instant index.html loaded, since both overlays
+  // load that same file and it carries one shared <title>DBD Surv
+  // Trainer</title> for all three windows. That's why OBS's Window
+  // Capture picker kept showing plain "DBD Surv Trainer" for every
+  // window regardless of the title passed to the constructor -- it was
+  // reading the real, current title, which really had been overwritten
+  // back to the generic one moments after each window appeared.
+  win.on('page-title-updated', (event) => {
+    event.preventDefault();
+  });
+
   win.on('closed', () => {
     if (viewName === 'map') mapOverlayWindow = null;
     if (viewName === 'timer') timerOverlayWindow = null;
@@ -658,8 +813,14 @@ function createOverlayWindow(viewName) {
 
 function createAllWindows() {
   createMainWindow();
-  mapOverlayWindow = createOverlayWindow('map');
-  timerOverlayWindow = createOverlayWindow('timer');
+
+  // Overlay windows are NOT created here at startup -- they only come
+  // into existence when the corresponding overlay is actually activated
+  // (see ensureTimerOverlayWindow/ensureMapOverlayWindow and the show/
+  // hide IPC handlers below), and are destroyed again when deactivated.
+  // Nothing spawns silently in the background (visible in Alt-Tab/OBS's
+  // window list, even fully transparent) before the user has actually
+  // turned anything on.
 
   // Windows-specific workaround: transparent, always-on-top "layered"
   // windows are sometimes not repainted by the OS compositor (DWM) as
@@ -668,6 +829,8 @@ function createAllWindows() {
   // lag behind. Nudging the native opacity by an imperceptible amount
   // forces DWM to treat the surface as dirty and repaint it. No effect on
   // macOS/Linux, where this isn't a known issue, but harmless there too.
+  // Guarded per-window since either one can now be null/destroyed at any
+  // given moment.
   if (process.platform === 'win32') {
     setInterval(() => {
       [mapOverlayWindow, timerOverlayWindow].forEach((win) => {
@@ -679,6 +842,64 @@ function createAllWindows() {
     }, 250);
   }
 }
+
+// Creates the timer overlay window if it doesn't already exist (a
+// second activation while it's already up is a harmless no-op, not a
+// duplicate window). Stays hidden (see show:false in createOverlayWindow)
+// until 'timer-overlay-ready' below says it's safe to reveal.
+function ensureTimerOverlayWindow() {
+  if (timerOverlayWindow && !timerOverlayWindow.isDestroyed()) return timerOverlayWindow;
+  timerOverlayWindow = createOverlayWindow('timer');
+  return timerOverlayWindow;
+}
+
+// Same, for the map overlay window.
+function ensureMapOverlayWindow() {
+  if (mapOverlayWindow && !mapOverlayWindow.isDestroyed()) return mapOverlayWindow;
+  mapOverlayWindow = createOverlayWindow('map');
+  return mapOverlayWindow;
+}
+
+ipcMain.on('show-timer-overlay', () => {
+  ensureTimerOverlayWindow();
+});
+
+ipcMain.on('hide-timer-overlay', () => {
+  if (timerOverlayWindow && !timerOverlayWindow.isDestroyed()) {
+    timerOverlayWindow.close();
+  }
+  timerOverlayWindow = null;
+});
+
+ipcMain.on('show-map-overlay', () => {
+  ensureMapOverlayWindow();
+});
+
+ipcMain.on('hide-map-overlay', () => {
+  if (mapOverlayWindow && !mapOverlayWindow.isDestroyed()) {
+    mapOverlayWindow.close();
+  }
+  mapOverlayWindow = null;
+});
+
+// Sent by the TIMER overlay window's own renderer once it has finished
+// fetching its geometry, restoring/moving to its saved position, and
+// resizing to match its real content -- i.e. exactly the point where
+// showing it can't produce a visible snap, because everything about its
+// size and position is already final. See show:false in
+// createOverlayWindow.
+ipcMain.on('timer-overlay-ready', () => {
+  if (timerOverlayWindow && !timerOverlayWindow.isDestroyed()) {
+    timerOverlayWindow.show();
+  }
+});
+
+// Same, for the map overlay window.
+ipcMain.on('map-overlay-ready', () => {
+  if (mapOverlayWindow && !mapOverlayWindow.isDestroyed()) {
+    mapOverlayWindow.show();
+  }
+});
 
 // ---------------------------------------------------------------------
 // Global hotkeys
@@ -913,6 +1134,551 @@ ipcMain.on('set-overlay-click-through', (_event, overlayName, ignore) => {
   }
 });
 
+// ----- timer overlay window repositioning + dynamic sizing (dragging
+// moves the actual OS window now, not just CSS position within a
+// full-screen one; the window's SIZE now also tracks the bar's own
+// real rendered size + a fixed margin -- see resize-timer-overlay-
+// window below -- rather than staying at one guessed fixed size that
+// could never correctly fit every combination of name length, scale%,
+// and side-by-side/stacked layout at once) -----
+//
+// Position is tracked by the window's CENTER point throughout this
+// whole system (move, resize, geometry, and what gets saved/restored
+// in the renderer) -- NOT its top-left corner. This matters because the
+// window's SIZE changes dynamically (see resize below): top-left is
+// only meaningful relative to a specific size, so a position saved
+// while the window was one size and restored after it settled at a
+// DIFFERENT size (which happens on essentially every launch, since the
+// window starts at TIMER_OV_WIN_W/H and gets resized to the real
+// content moments later) would silently shift where the bar actually
+// ends up -- and since the shifted result is what gets saved again
+// next time, that error compounds further on every subsequent launch.
+// That compounding drift is exactly what showed up as "the overlay
+// spawns further off-screen every time the app is reopened". The
+// center point doesn't have this problem: it stays meaningful and
+// correct regardless of what size the window happens to be, which is
+// also exactly the point resize-timer-overlay-window already anchors
+// to when it resizes -- using the same reference point everywhere
+// closes the gap between them instead of letting them drift apart.
+//
+// One-shot fetch the renderer calls right after load, and again whenever
+// it needs fresh numbers (e.g. right before starting a drag) -- gives it
+// everything needed to convert a saved/dragged position into absolute
+// screen coordinates and compute where the screen's own edges are for
+// snapping, without hardcoding any of that on the renderer side.
+ipcMain.handle('get-timer-overlay-geometry', () => {
+  const display = screen.getPrimaryDisplay();
+  // currentCenterX/Y come from the window's OWN current bounds (already
+  // positioned/sized at a sensible default by createOverlayWindow
+  // above) -- returned here so the renderer only needs to override this
+  // with a saved position when one genuinely exists, instead of
+  // duplicating that same "reasonable default" math a second time on
+  // its side.
+  let currentCenterX = display.bounds.x + TIMER_OV_WIN_W / 2;
+  let currentCenterY = display.bounds.y + TIMER_OV_WIN_H / 2;
+  if (timerOverlayWindow && !timerOverlayWindow.isDestroyed()) {
+    const bounds = timerOverlayWindow.getBounds();
+    currentCenterX = bounds.x + bounds.width / 2;
+    currentCenterY = bounds.y + bounds.height / 2;
+  }
+  return {
+    currentCenterX: currentCenterX,
+    currentCenterY: currentCenterY,
+    displayX: display.bounds.x,
+    displayY: display.bounds.y,
+    displayW: display.bounds.width,
+    displayH: display.bounds.height
+  };
+});
+
+// Shared by all four move/resize handlers below (timer + map). Given a
+// desired CENTER point and a window size, returns the top-left x/y that
+// keeps the WHOLE window inside the display when it fits (rather than
+// the old clamp, which only guaranteed 40px stayed visible -- enough to
+// still grab and drag it back, but happily let most of a freshly
+// enlarged window hang off the edge, which is exactly what "growing it
+// pushes it off-screen" was). Falls back to anchoring flush against the
+// near edge only in the genuine edge case where the window itself is
+// bigger than the display in that dimension, since full containment
+// isn't possible there regardless of position.
+//
+// Also returns whether each axis was ACTUALLY clamped (clampedX/
+// clampedY) -- resize-*-overlay-window below uses this to report back
+// the exact, unrounded requested center whenever nothing needed
+// clamping (the overwhelming majority of resizes, comfortably away
+// from any edge), instead of always recomputing it from the rounded
+// pixel position. Recomputing from the rounded pixel was the source of
+// a slow, real drift confirmed directly: JS's Math.round always rounds
+// a .5 boundary UP, never down, so a sequence of resizes whose width/
+// height alternate between odd and even (completely ordinary while
+// dragging a scale/size slider) hit that .5 boundary repeatedly and
+// biased the same direction every single time -- small per-step, but
+// compounding into a real, visible several-pixel drift over the course
+// of one drag, EVEN with the renderer's own center-correction relay
+// already in place (that relay faithfully reports the rounding-biased
+// result back -- it doesn't remove the bias, since the bias comes from
+// this rounding step itself, not from disagreement between the
+// renderer and main.js about what was requested).
+// margin (optional, default 0): how many pixels of the window's OWN
+// edge are allowed to extend past the display boundary before this
+// actually clamps anything -- lets the window's transparent margin
+// (drawn around the bar/map so the dashed positioning frame and glow
+// effects have room -- see OV_FRAME_OFFSET_*/MAP_WIN_MARGIN_PX in the
+// renderer) sit slightly off-screen exactly the way the drag/snap
+// system already intends, while still guaranteeing the actual VISIBLE
+// content (window inset by that same margin) never goes off-screen.
+// Without this, resizing an overlay that had been snapped flush
+// against an edge (bar's own edge at display+8px, per the snap system,
+// meaning the WINDOW's edge sits a bit further out, inside its own
+// margin) would get its whole window+margin forced fully on-screen,
+// visibly shoving the bar inward by the difference -- confirmed
+// directly from a screenshot: the same overlay, snapped to the top at
+// 100% size, showing its dashed frame flush with the screen's top
+// edge, then visibly sitting well below it after only changing size to
+// 80%, even with the edge-anchoring fix already keeping the bar's
+// OWN previous edge as the anchor point -- the anchor math was correct,
+// but this clamp was then moving the result anyway.
+//
+// Accepts either a single number (one uniform margin on every side --
+// what the map overlay still uses) or an object { top, bottom, left,
+// right } for a window whose margin differs per side (the timer, now
+// that it sits exactly flush against its own frame, which itself isn't
+// the same distance from the bar on every side).
+function clampWindowToDisplay(centerX, centerY, w, h, display, margin) {
+  let top, bottom, left, right;
+  if (margin && typeof margin === 'object') {
+    top = margin.top || 0;
+    bottom = margin.bottom || 0;
+    left = margin.left || 0;
+    right = margin.right || 0;
+  } else {
+    top = bottom = left = right = margin || 0;
+  }
+  const idealX = centerX - w / 2;
+  const idealY = centerY - h / 2;
+  const minX = display.bounds.x - left;
+  const maxX = display.bounds.x + display.bounds.width - w + right;
+  let x, clampedX;
+  if (minX >= maxX) {
+    x = minX;
+    clampedX = true;
+  } else {
+    const boundedIdealX = Math.max(minX, Math.min(maxX, idealX));
+    clampedX = (boundedIdealX !== idealX);
+    x = Math.round(boundedIdealX);
+  }
+  const minY = display.bounds.y - top;
+  const maxY = display.bounds.y + display.bounds.height - h + bottom;
+  let y, clampedY;
+  if (minY >= maxY) {
+    y = minY;
+    clampedY = true;
+  } else {
+    const boundedIdealY = Math.max(minY, Math.min(maxY, idealY));
+    clampedY = (boundedIdealY !== idealY);
+    y = Math.round(boundedIdealY);
+  }
+  return { x, y, clampedX, clampedY };
+}
+
+// Given the window's OLD center + OLD size, checks whether it was
+// sitting flush against a display edge (e.g. dragged there via the
+// renderer's own snap-to-edge magnet) on each axis independently, and
+// if so, returns a NEW center that keeps that same edge fixed as the
+// window grows/shrinks -- rather than always growing symmetrically
+// from the center, which visibly pulls an edge-snapped overlay away
+// from the very edge it was snapped to every time its size changes
+// (an overlay flush against the top of the screen at 100% size ends up
+// well below the top at 50%, since only the center point, not the top
+// edge, was ever being preserved).
+//
+// Deliberately NOT the same "which half of the display is the center
+// in" heuristic tried earlier for general edge-anchoring, which was
+// reverted for being unstable near the display's own midline (a tiny
+// position shift right around 50% flipped which side it anchored to,
+// reading as "moves around unpredictably"). Checking actual proximity
+// to 0 or to the display's far edge is a fundamentally more stable
+// signal: it only matters near the edges themselves (where an overlay
+// deliberately snapped there will genuinely sit), not across the whole
+// width/height of the display the way a less-than/greater-than-the-
+// midpoint check does.
+// tolerance (required, not a fixed shared constant): how many px the
+// window's OWN edge can differ from the display boundary before this
+// still counts as "flush against it". This has to be based on each
+// overlay's own margin, not one shared fixed number -- when snapped
+// via the drag magnet, the bar/map's own edge lands ~8px from the
+// display edge (the renderer's own OV_EDGE_MARGIN_PX), but the
+// WINDOW's edge sits margin px further out than that. A single fixed
+// 20px tolerance correctly covered the timer (26px margin -> ~18px
+// window-edge offset, within 20) but silently missed the map (60px
+// margin -> ~52px offset, well past 20) -- confirmed directly from two
+// screenshots showing the map's dashed frame flush with the screen at
+// 100% size and visibly detached from it at 50%, the exact bug already
+// fixed for the timer, just not actually caught for the map since this
+// check was failing before ever reaching the anchoring logic below.
+function computeEdgeAnchoredCenter(oldCenterX, oldCenterY, oldW, oldH, display, tolerance) {
+  if (!oldW || !oldH) {
+    // No known previous size (e.g. the very first resize for a freshly
+    // created window) -- nothing to anchor from, fall back to the
+    // requested center unchanged.
+    return { centerX: oldCenterX, centerY: oldCenterY };
+  }
+  const oldLeft = oldCenterX - oldW / 2;
+  const oldRight = oldCenterX + oldW / 2;
+  const oldTop = oldCenterY - oldH / 2;
+  const oldBottom = oldCenterY + oldH / 2;
+  const nearLeft = Math.abs(oldLeft - display.bounds.x) <= tolerance;
+  const nearRight = Math.abs(oldRight - (display.bounds.x + display.bounds.width)) <= tolerance;
+  const nearTop = Math.abs(oldTop - display.bounds.y) <= tolerance;
+  const nearBottom = Math.abs(oldBottom - (display.bounds.y + display.bounds.height)) <= tolerance;
+  return {
+    anchorLeft: nearLeft,
+    anchorRight: !nearLeft && nearRight,
+    anchorTop: nearTop,
+    anchorBottom: !nearTop && nearBottom,
+    oldLeft, oldRight, oldTop, oldBottom
+  };
+}
+
+// ---------------------------------------------------------------------
+// EXPLICIT DOCKING (replaces the proximity-guessing above as the primary
+// path -- computeEdgeAnchoredCenter is only still used as a fallback for
+// an old renderer that doesn't send a dock descriptor).
+//
+// The old system tried to INFER, on every single resize, whether the
+// overlay was currently snapped to an edge, by checking how close its
+// previous window edges happened to be to the display's edges. That is
+// unreliable in both directions and is the actual root cause of "the
+// overlay comes away from the edge while I drag the Size slider":
+//
+//   * the tolerance has to be wide enough to cover the window's own
+//     transparent margin (75px for the map), which means an overlay
+//     merely sitting NEAR an edge -- never deliberately snapped there --
+//     gets silently treated as docked, and a large map can satisfy
+//     nearTop AND nearBottom at once, so a centred map gets yanked to
+//     the top;
+//   * conversely, the moment anything (a clamp, a rounding step, one
+//     stale oldWidth/oldHeight pair from a competing resize path) moves
+//     the window by more than the tolerance, the check silently fails
+//     and the overlay is treated as free-floating -- it then grows from
+//     its centre and visibly peels away from the edge it was glued to,
+//     with no way to ever get back, because the next resize starts from
+//     the already-wrong position.
+//
+// Both problems disappear once the renderer simply TELLS us where the
+// overlay is docked (it knows exactly: the drag's own snap magnet is
+// what put it there). The docked position is then recomputed ABSOLUTELY
+// from the display bounds on every resize -- never incrementally from
+// the previous position -- so it is exact every time and mathematically
+// cannot drift, no matter how many resizes happen or in what order.
+//
+// dock: { x: 'left'|'center'|'right'|null,
+//         y: 'top'|'center'|'bottom'|null,
+//         insetX: number, insetY: number }
+// insetX/insetY = how far the WINDOW's own docked edge should sit from
+// the display's edge. It is normally NEGATIVE, because the window is
+// deliberately larger than the visible overlay (transparent margin for
+// the dashed frame and the neon glow): the timer sits flush (0), the map
+// sits at MAP_EDGE_MARGIN_PX - MAP_WIN_MARGIN_PX so that its dashed
+// frame -- not its window -- is what lands exactly on the screen edge.
+// A null on an axis means "not docked on this axis": that axis keeps
+// whatever free-floating behaviour the caller asks for.
+function computeDockedCenter(dock, w, h, display) {
+  const dx = display.bounds.x, dy = display.bounds.y;
+  const dw = display.bounds.width, dh = display.bounds.height;
+  const insetX = (dock && typeof dock.insetX === 'number') ? dock.insetX : 0;
+  const insetY = (dock && typeof dock.insetY === 'number') ? dock.insetY : 0;
+  const out = { x: null, y: null };
+  const dkx = dock && dock.x;
+  const dky = dock && dock.y;
+  if (dkx === 'left') out.x = dx + insetX + w / 2;
+  else if (dkx === 'right') out.x = dx + dw - insetX - w / 2;
+  else if (dkx === 'center') out.x = dx + dw / 2;
+  if (dky === 'top') out.y = dy + insetY + h / 2;
+  else if (dky === 'bottom') out.y = dy + dh - insetY - h / 2;
+  else if (dky === 'center') out.y = dy + dh / 2;
+  return out;
+}
+function hasDock(dock) {
+  return !!(dock && (dock.x || dock.y));
+}
+// The renderer asks for the off-screen guard to be skipped on a resize
+// that is deliberately larger than the overlay actually needs (see
+// ovSyncWindowToContent in the renderer: the window is grown with
+// headroom so that one resize covers many slider steps, instead of one
+// native resize per step). Clamping such a window would shove it inward
+// to keep the OVERSIZE fully on-screen and drag the overlay along with
+// it -- a visible jump caused entirely by empty transparent space. The
+// exact fit that follows a moment later is clamped normally.
+function noClampRequested(dock) {
+  return !!(dock && dock.noClamp);
+}
+// A resize that must NOT move the window: only its width and height
+// change, its top-left corner stays exactly where it is.
+//
+// Moving a frameless transparent window is the expensive, visibly
+// glitchy operation -- far more so than resizing one in place, which is
+// why a left- or top-docked overlay (whose x/y never depend on its size)
+// was always smooth while a right-docked or centred one was not. The
+// renderer places its content from absolute screen coordinates now, so
+// it no longer needs the window to sit in any particular spot: it only
+// needs the window to be big enough, and to know where it is. That lets
+// the one growth at the start of a size gesture be a pure resize.
+function anchorTopLeftRequested(dock) {
+  return !!(dock && dock.anchorTopLeft);
+}
+
+// Moves the actual timer overlay window -- called continuously while
+// dragging (see ovPositionMousemove in the renderer) and once more on
+// drop. centerX/centerY are the window's target CENTER point in
+// absolute screen coordinates (see the note above for why center, not
+// top-left); clamped here (not trusted from the renderer) so a fast
+// drag that outruns the cursor can't push the window fully off-screen
+// where it would become impossible to grab again. Uses the window's
+// CURRENT actual size (not a fixed constant) to convert center back to
+// the top-left setBounds itself actually needs, since size now varies
+// with content -- see resize-timer-overlay-window.
+ipcMain.on('move-timer-overlay-window', (_event, centerX, centerY) => {
+  if (!timerOverlayWindow || timerOverlayWindow.isDestroyed()) return;
+  const display = screen.getPrimaryDisplay();
+  const bounds = timerOverlayWindow.getBounds();
+  // Deliberately the OLDER, looser "40px must stay visible" clamp here,
+  // NOT clampWindowToDisplay (that one's reserved for resize -- see
+  // below) -- dragging is meant to allow tucking the overlay flush
+  // against or mostly past an edge if that's where it's wanted, same
+  // as before this whole rework. Only growing via resize should be
+  // prevented from pushing the window off-screen; freely dragging it
+  // there on purpose is a different, intentional case.
+  const x = centerX - bounds.width / 2;
+  const y = centerY - bounds.height / 2;
+  const clampedX = Math.max(
+    display.bounds.x - bounds.width + 40,
+    Math.min(display.bounds.x + display.bounds.width - 40, Math.round(x))
+  );
+  const clampedY = Math.max(
+    display.bounds.y - bounds.height + 40,
+    Math.min(display.bounds.y + display.bounds.height - 40, Math.round(y))
+  );
+  timerOverlayWindow.setBounds({
+    x: clampedX, y: clampedY, width: bounds.width, height: bounds.height
+  });
+});
+
+// Resizes the timer overlay window to exactly match the bar's own
+// current rendered size plus a fixed margin (see OV_WIN_MARGIN_PX in
+// the renderer) -- called on the scale slider's release. Grows
+// symmetrically from the CENTER (via clampWindowToDisplay) rather than
+// anchoring to whichever edge/corner the overlay currently sits near --
+// an edge-anchored version was tried, but "which half of the display is
+// the center in" is exactly the wrong thing to base that decision on
+// for an overlay sitting anywhere close to the screen's own midline (the
+// timer's own default position is dead-center horizontally): a tiny
+// shift in center position right around that midpoint flips the anchor
+// decision from one side to the other, which is what showed up as
+// "moves around unpredictably, sometimes up then back down" even for a
+// steady, one-directional size change. Growing from the center is
+// always the exact same, fully predictable math regardless of where the
+// overlay happens to sit -- clampWindowToDisplay still keeps it from
+// going off-screen, which was the actual original ask; edge-anchoring
+// was a later refinement that turned out less stable than the plain
+// version it replaced.
+//
+// handle (not on) -- returns the ACTUAL resulting center, which the
+// renderer uses to correct its own ovWinX/Y (see resizeTimerOverlayWindow
+// in preload.js for the fuller reasoning: without this, the renderer's
+// own idea of "current center" could silently fall out of sync with
+// reality every time clamping actually changed the requested position,
+// which then compounded further on every subsequent resize near an
+// edge).
+ipcMain.handle('resize-timer-overlay-window', (_event, width, height, centerX, centerY, oldWidth, oldHeight, dock) => {
+  // No-op on the window itself now: the overlay windows are display-sized
+  // and fixed (see createOverlayWindow). The renderer still calls this
+  // during startup, so the reply keeps its shape -- the centre it asked
+  // for is simply echoed straight back.
+  return { centerX, centerY, clampedX: false, clampedY: false };
+
+  if (!timerOverlayWindow || timerOverlayWindow.isDestroyed()) return null;
+  const display = screen.getPrimaryDisplay();
+  // centerX/centerY come directly from the renderer's own stable
+  // tracked ovWinX/Y -- NOT re-derived from timerOverlayWindow.
+  // getBounds() -- re-reading already-rounded native bounds and
+  // rounding again on top of that, repeatedly, is what caused the
+  // overlay to visibly drift toward the bottom-right over many resizes
+  // before this was fixed.
+  const w = Math.max(40, Math.round(width));
+  const h = Math.max(40, Math.round(height));
+  // Explicit dock first (see computeDockedCenter). Absolute, exact, and
+  // drift-proof: a docked axis is recomputed straight from the display
+  // bounds, so it lands on the same pixel every single resize.
+  const docked = computeDockedCenter(dock, w, h, display);
+  // Fallback for an axis with no dock: the old proximity guess is only
+  // consulted when the renderer sent no dock descriptor at all (older
+  // renderer). When it DID send one, a null axis genuinely means "free
+  // floating" and must be left alone -- guessing there is exactly what
+  // used to move an overlay the user had deliberately left in the middle
+  // of the screen.
+  const anchor = hasDock(dock) ? null
+    : computeEdgeAnchoredCenter(centerX, centerY, oldWidth, oldHeight, display, TIMER_OV_WIN_MARGIN_BOTTOM + 15);
+  const anchoredCenterX = (docked.x !== null) ? docked.x
+    : (anchor && anchor.anchorLeft) ? (anchor.oldLeft + w / 2)
+    : (anchor && anchor.anchorRight) ? (anchor.oldRight - w / 2)
+    // Free-floating on X: the bar is centred in its window and the
+    // window resizes around that same centre, so preserving the centre
+    // preserves the bar's on-screen position exactly. Rounded to a whole
+    // pixel, and paired with the renderer forcing an EVEN window width
+    // (see ovWinSizeForBar), so x = centreX - w/2 lands with no rounding
+    // residue and the bar can't shuffle sideways by half a pixel as the
+    // width's parity flips during a Size drag.
+    : Math.round(centerX);
+  const anchoredCenterY = (docked.y !== null) ? docked.y
+    : (anchor && anchor.anchorTop) ? (anchor.oldTop + h / 2)
+    : (anchor && anchor.anchorBottom) ? (anchor.oldBottom - h / 2)
+    // Free-floating on Y: keep the window's CENTRE fixed. The bar is no
+    // longer pinned to the window's top edge -- the window is routinely
+    // larger than the bar now, so the renderer centres the bar's box
+    // inside it instead (see ovSetBarScale). Those two have to agree:
+    // holding the top edge here while the renderer holds the centre
+    // meant every height change moved the bar by half the difference,
+    // which is one of the ways an overlay jumped out from under the
+    // cursor mid-positioning.
+    : Math.round(centerY);
+  const pos = clampWindowToDisplay(anchoredCenterX, anchoredCenterY, w, h, display, {
+    top: TIMER_OV_WIN_MARGIN_TOP, bottom: TIMER_OV_WIN_MARGIN_BOTTOM,
+    left: TIMER_OV_WIN_MARGIN_LEFT, right: TIMER_OV_WIN_MARGIN_RIGHT
+  });
+  // A docked axis is NEVER clamped. The dock target is the user's own
+  // explicit intent (they dragged it there and the snap magnet caught
+  // it), and it is already exact by construction; letting the generic
+  // off-screen guard second-guess it is precisely what used to shove a
+  // top-snapped overlay a few pixels down the moment its size changed,
+  // and what broke docking outright for an overlay larger than the
+  // display in one dimension (where the clamp gives up and pins the
+  // window to one fixed edge regardless of what was asked for).
+  if (docked.x !== null || noClampRequested(dock)) { pos.x = Math.round(anchoredCenterX - w / 2); pos.clampedX = false; }
+  if (docked.y !== null || noClampRequested(dock)) { pos.y = Math.round(anchoredCenterY - h / 2); pos.clampedY = false; }
+  if (anchorTopLeftRequested(dock)) {
+    // Pure resize -- read the window's real current corner and keep it.
+    const keep = timerOverlayWindow.getBounds();
+    timerOverlayWindow.setBounds({ x: keep.x, y: keep.y, width: w, height: h });
+    return { centerX: keep.x + w / 2, centerY: keep.y + h / 2, clampedX: false, clampedY: false };
+  }
+  timerOverlayWindow.setBounds({
+    x: pos.x,
+    y: pos.y,
+    width: w,
+    height: h
+  });
+  // Echoes back the EXACT (possibly edge-anchored) requested center on
+  // any axis that wasn't actually clamped -- see the long comment on
+  // clampWindowToDisplay for why recomputing it from the rounded pixel
+  // position every time was itself the source of a slow drift, even
+  // nowhere near an edge.
+  return {
+    centerX: pos.clampedX ? (pos.x + w / 2) : anchoredCenterX,
+    centerY: pos.clampedY ? (pos.y + h / 2) : anchoredCenterY
+  };
+});
+
+// ----- map overlay window repositioning + dynamic sizing -- same
+// center-anchored system as the timer's own three handlers just above
+// (see the long note above get-timer-overlay-geometry for why center,
+// not top-left), mirrored here for the map overlay window. -----
+ipcMain.handle('get-map-overlay-geometry', () => {
+  const display = screen.getPrimaryDisplay();
+  let currentCenterX = display.bounds.x + MAP_OV_WIN_W / 2;
+  let currentCenterY = display.bounds.y + MAP_OV_WIN_H / 2;
+  if (mapOverlayWindow && !mapOverlayWindow.isDestroyed()) {
+    const bounds = mapOverlayWindow.getBounds();
+    currentCenterX = bounds.x + bounds.width / 2;
+    currentCenterY = bounds.y + bounds.height / 2;
+  }
+  return {
+    currentCenterX: currentCenterX,
+    currentCenterY: currentCenterY,
+    displayX: display.bounds.x,
+    displayY: display.bounds.y,
+    displayW: display.bounds.width,
+    displayH: display.bounds.height
+  };
+});
+
+ipcMain.on('move-map-overlay-window', (_event, centerX, centerY) => {
+  if (!mapOverlayWindow || mapOverlayWindow.isDestroyed()) return;
+  const display = screen.getPrimaryDisplay();
+  const bounds = mapOverlayWindow.getBounds();
+  // Same "old looser 40px clamp for dragging" reasoning as the timer's
+  // own move handler above -- clampWindowToDisplay stays reserved for
+  // resize only.
+  const x = centerX - bounds.width / 2;
+  const y = centerY - bounds.height / 2;
+  const clampedX = Math.max(
+    display.bounds.x - bounds.width + 40,
+    Math.min(display.bounds.x + display.bounds.width - 40, Math.round(x))
+  );
+  const clampedY = Math.max(
+    display.bounds.y - bounds.height + 40,
+    Math.min(display.bounds.y + display.bounds.height - 40, Math.round(y))
+  );
+  mapOverlayWindow.setBounds({
+    x: clampedX, y: clampedY, width: bounds.width, height: bounds.height
+  });
+});
+
+// handle (not on) -- see the timer's own resize handler above for why
+// this returns the actual resulting center.
+ipcMain.handle('resize-map-overlay-window', (_event, width, height, centerX, centerY, oldWidth, oldHeight, dock) => {
+  // No-op on the window itself now: the overlay windows are display-sized
+  // and fixed (see createOverlayWindow). The renderer still calls this
+  // during startup, so the reply keeps its shape -- the centre it asked
+  // for is simply echoed straight back.
+  return { centerX, centerY, clampedX: false, clampedY: false };
+
+  if (!mapOverlayWindow || mapOverlayWindow.isDestroyed()) return null;
+  const display = screen.getPrimaryDisplay();
+  const w = Math.max(40, Math.round(width));
+  const h = Math.max(40, Math.round(height));
+  // Same explicit-dock-first system as the timer's handler above -- see
+  // computeDockedCenter for why guessing from edge proximity had to go.
+  // It mattered even more here: the map's tolerance was MAP_OV_WIN_MARGIN_PX
+  // + 15 = 75px, wide enough that a large map centred on a 1080p screen
+  // satisfied "near the top" AND "near the bottom" simultaneously and got
+  // silently anchored to the top, and wide enough that a map merely
+  // parked near an edge was treated as glued to it.
+  const docked = computeDockedCenter(dock, w, h, display);
+  const anchor = hasDock(dock) ? null
+    : computeEdgeAnchoredCenter(centerX, centerY, oldWidth, oldHeight, display, MAP_OV_WIN_MARGIN_PX + 15);
+  const anchoredCenterX = (docked.x !== null) ? docked.x
+    : (anchor && anchor.anchorLeft) ? (anchor.oldLeft + w / 2)
+    : (anchor && anchor.anchorRight) ? (anchor.oldRight - w / 2)
+    : centerX;
+  const anchoredCenterY = (docked.y !== null) ? docked.y
+    : (anchor && anchor.anchorTop) ? (anchor.oldTop + h / 2)
+    : (anchor && anchor.anchorBottom) ? (anchor.oldBottom - h / 2)
+    : centerY;
+  const pos = clampWindowToDisplay(anchoredCenterX, anchoredCenterY, w, h, display, MAP_OV_WIN_MARGIN_PX);
+  // Docked axes bypass the clamp entirely -- see the timer handler.
+  if (docked.x !== null || noClampRequested(dock)) { pos.x = Math.round(anchoredCenterX - w / 2); pos.clampedX = false; }
+  if (docked.y !== null || noClampRequested(dock)) { pos.y = Math.round(anchoredCenterY - h / 2); pos.clampedY = false; }
+  if (anchorTopLeftRequested(dock)) {
+    // Pure resize -- read the window's real current corner and keep it.
+    const keep = mapOverlayWindow.getBounds();
+    mapOverlayWindow.setBounds({ x: keep.x, y: keep.y, width: w, height: h });
+    return { centerX: keep.x + w / 2, centerY: keep.y + h / 2, clampedX: false, clampedY: false };
+  }
+  mapOverlayWindow.setBounds({
+    x: pos.x,
+    y: pos.y,
+    width: w,
+    height: h
+  });
+  // Same "echo back the exact requested center unless genuinely
+  // clamped" fix as the timer's own resize handler above.
+  return {
+    centerX: pos.clampedX ? (pos.x + w / 2) : anchoredCenterX,
+    centerY: pos.clampedY ? (pos.y + h / 2) : anchoredCenterY
+  };
+});
+
 // Relays live name/score edits made directly on the timer overlay window
 // back to the main window, which is the source of truth for that state.
 ipcMain.on('overlay-edit-update', (_event, payload) => {
@@ -965,7 +1731,16 @@ ipcMain.on('match-reset', () => {
 });
 
 ipcMain.on('match-swap-sides', () => {
-  const t = matchT1Elapsed; matchT1Elapsed = matchT2Elapsed; matchT2Elapsed = t;
+  // Flips ONLY which side is currently active -- nothing about the
+  // timers' own elapsed values, names, scores, or colors moves at all
+  // anymore. This used to swap matchT1Elapsed/matchT2Elapsed (making
+  // it look like the two sides' running times had traded places); now
+  // it's a pure handoff of which physical input (Start/Crouch/M1)
+  // controls which side going forward -- Player 1's box always stays
+  // Player 1's box, Player 2's always stays Player 2's, only the
+  // active-timer indicator (see the renderer's own activeTimer-based
+  // ".active" class) moves to reflect the new input target.
+  matchActiveTimer = matchActiveTimer === 1 ? 2 : 1;
   broadcastMatchTick();
 });
 
